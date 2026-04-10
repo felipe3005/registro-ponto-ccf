@@ -1,0 +1,59 @@
+{
+  "name": "registro-ponto-ccf",
+  "version": "1.0.0",
+  "main": "main.js",
+  "description": "Sistema de Registro de Ponto Digital - CCF",
+  "author": "CCF",
+  "license": "ISC",
+  "scripts": {
+    "start": "electron .",
+    "dev": "node src/backend/server.js",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build": "electron-builder --win --mac",
+    "init-db": "node -e \"require('./src/backend/database').initDatabase().then(() => { console.log('OK'); process.exit(); })\""
+  },
+  "build": {
+    "appId": "com.ccf.ponto-digital",
+    "productName": "Ponto Digital CCF",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "src/**/*",
+      "uploads/",
+      ".env",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerHeaderIcon": "icon.png"
+    }
+  },
+  "devDependencies": {
+    "electron": "^41.2.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "csv-writer": "^1.6.0",
+    "dotenv": "^17.4.1",
+    "electron-builder": "^26.8.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "moment": "^2.30.1",
+    "multer": "^2.1.1",
+    "mysql2": "^3.22.0",
+    "pdfkit": "^0.18.0"
+  }
+}
