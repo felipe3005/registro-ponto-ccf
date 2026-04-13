@@ -1,6 +1,6 @@
 {
   "name": "registro-ponto-ccf",
-  "version": "1.0.8",
+  "version": "1.0.10",
   "main": "main.js",
   "description": "Sistema de Registro de Ponto Digital - CCF",
   "author": "CCF",
@@ -38,9 +38,12 @@
       "icon": "src/frontend/images/icon.png"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "installerHeaderIcon": "src/frontend/images/icon.png"
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "installerHeaderIcon": "src/frontend/images/icon.png",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
     },
     "publish": [
       {

@@ -25,6 +25,7 @@ const { startServer } = require('./src/backend/server');
 let mainWindow;
 let server;
 let autoUpdater;
+let isQuittingForUpdate = false;
 
 const PORT = 3131;
 
@@ -38,14 +39,14 @@ function setupAutoUpdater() {
   }
 
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-
-  // Log de update
-  autoUpdater.logger = {
-    info: (msg) => console.log('[AutoUpdater]', msg),
-    warn: (msg) => console.warn('[AutoUpdater]', msg),
-    error: (msg) => console.error('[AutoUpdater]', msg)
-  };
+  autoUpdater.autoInstallOnAppQuit = false; // vamos chamar quitAndInstall manualmente
+  autoUpdater.allowDowngrade = false;
+  autoUpdater.logger = logToFile ? {
+    info: (m) => logToFile('[AutoUpdater] ' + m),
+    warn: (m) => logToFile('[AutoUpdater][WARN] ' + m),
+    error: (m) => logToFile('[AutoUpdater][ERROR] ' + m),
+    debug: (m) => logToFile('[AutoUpdater][DEBUG] ' + m)
+  } : null;
 
   autoUpdater.on('checking-for-update', () => {
     console.log('[AutoUpdater] Verificando atualizacoes...');
@@ -77,22 +78,34 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    console.log('[AutoUpdater] Atualizacao baixada:', info.version);
+    logToFile('[AutoUpdater] Atualizacao baixada: ' + info.version);
     sendToWindow('update-status', {
       status: 'downloaded',
-      message: 'Atualizacao v' + info.version + ' pronta! O sistema sera reiniciado.',
+      message: 'Atualizacao v' + info.version + ' pronta! Clique em reiniciar.',
       version: info.version
     });
 
-    // Dar 5 segundos para o usuario ler o aviso, depois reiniciar
-    setTimeout(() => {
-      autoUpdater.quitAndInstall(false, true);
-    }, 5000);
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      buttons: ['Reiniciar agora', 'Mais tarde'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Atualizacao disponivel',
+      message: 'Nova versao ' + info.version + ' baixada.',
+      detail: 'O aplicativo precisa reiniciar para aplicar a atualizacao.'
+    }).then((result) => {
+      if (result.response === 0) {
+        installUpdate();
+      } else {
+        // Se escolher mais tarde, instala ao fechar
+        autoUpdater.autoInstallOnAppQuit = true;
+      }
+    }).catch(err => logToFile('[AutoUpdater] dialog erro: ' + err.message));
   });
 
   autoUpdater.on('error', (err) => {
-    console.error('[AutoUpdater] Erro:', err.message);
-    // Nao mostrar erro ao usuario em producao (pode ser que nao tem internet)
+    logToFile('[AutoUpdater] Erro: ' + (err && err.message ? err.message : err));
+    sendToWindow('update-status', { status: 'error', message: 'Erro na atualizacao: ' + (err && err.message ? err.message : err) });
   });
 
   // Verificar updates a cada 30 minutos
@@ -104,6 +117,22 @@ function setupAutoUpdater() {
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch(() => {});
   }, 10000);
+}
+
+function installUpdate() {
+  if (!autoUpdater) return;
+  logToFile('[AutoUpdater] Iniciando quitAndInstall...');
+  isQuittingForUpdate = true;
+  // Fecha o servidor antes do quit para liberar a porta
+  try { if (server) server.close(); } catch (e) {}
+  // isSilent=true (Windows: sem UI do instalador), isForceRunAfter=true (reabre o app)
+  setImmediate(() => {
+    try {
+      autoUpdater.quitAndInstall(true, true);
+    } catch (err) {
+      logToFile('[AutoUpdater] erro no quitAndInstall: ' + err.message);
+    }
+  });
 }
 
 function sendToWindow(channel, data) {
@@ -198,8 +227,15 @@ app.on('ready', async function() {
 });
 
 app.on('window-all-closed', function() {
-  if (server) server.close();
+  if (isQuittingForUpdate) return; // deixa o autoUpdater controlar o ciclo de vida
+  try { if (server) server.close(); } catch (e) {}
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', function() {
+  if (autoUpdater && autoUpdater.autoInstallOnAppQuit) {
+    logToFile('[AutoUpdater] before-quit com update pendente - instalando...');
+  }
 });
 
 app.on('activate', function() {
