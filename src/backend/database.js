@@ -99,7 +99,28 @@ async function initDatabase() {
       )
     `);
 
-    // Tabela de configurações de horário
+    // Tabela de perfis de horário
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS rp_perfis_horario (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nome VARCHAR(100) NOT NULL,
+        hora_entrada TIME NOT NULL,
+        hora_saida_almoco TIME,
+        hora_retorno_almoco TIME,
+        hora_saida TIME NOT NULL,
+        dias_trabalho VARCHAR(20) DEFAULT '1,2,3,4,5' COMMENT 'dias da semana: 0=dom,1=seg...6=sab',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Migração: adicionar perfil_horario_id em funcionários
+    const [colsFunc] = await conn.execute(`SHOW COLUMNS FROM rp_funcionarios`);
+    const colNamesFunc = colsFunc.map(c => c.Field);
+    if (!colNamesFunc.includes('perfil_horario_id')) {
+      await conn.execute(`ALTER TABLE rp_funcionarios ADD COLUMN perfil_horario_id INT AFTER jornada_semanal`);
+    }
+
+    // Tabela de configurações de horário (legado - por funcionário/dia)
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS rp_configuracoes_horario (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -110,6 +131,26 @@ async function initDatabase() {
         hora_retorno_almoco TIME,
         hora_saida TIME,
         UNIQUE KEY uk_func_dia (funcionario_id, dia_semana)
+      )
+    `);
+
+    // Tabela de abonos
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS rp_abonos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        funcionario_id INT NOT NULL,
+        tipo ENUM('atestado', 'abono_horas', 'compensacao') NOT NULL,
+        data_inicio DATE NOT NULL,
+        data_fim DATE NOT NULL,
+        horas DECIMAL(5,2) DEFAULT NULL COMMENT 'horas abonadas (para abono parcial)',
+        motivo TEXT NOT NULL,
+        arquivo_path VARCHAR(500) DEFAULT NULL,
+        status ENUM('pendente', 'aprovado', 'rejeitado') DEFAULT 'pendente',
+        admin_id INT DEFAULT NULL,
+        motivo_rejeicao TEXT DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_abono_func (funcionario_id),
+        INDEX idx_abono_status (status)
       )
     `);
 

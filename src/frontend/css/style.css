@@ -533,6 +533,30 @@ tbody tr { transition: background .2s; }
 .justify-between { justify-content: space-between; }
 
 /*--------------------------------------------------------------
+# Perfis de Horário - Checkboxes
+--------------------------------------------------------------*/
+.dias-trabalho-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+.checkbox-inline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+}
+.checkbox-inline input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--ccf-blue);
+}
+
+/*--------------------------------------------------------------
 # Offline Banner
 --------------------------------------------------------------*/
 .offline-banner {

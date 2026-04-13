@@ -47,6 +47,7 @@ document.getElementById('form-login').addEventListener('submit', async (e) => {
   const senha = document.getElementById('login-senha').value;
 
   // Tentar login online primeiro
+  let loginOnlineError = null;
   try {
     const data = await api.login(usuario, senha);
     api.setToken(data.token);
@@ -67,9 +68,12 @@ document.getElementById('form-login').addEventListener('submit', async (e) => {
     toast('Login realizado com sucesso!', 'success');
     return;
   } catch (err) {
-    // Se estiver online, o erro é real (credenciais inválidas etc)
-    if (OfflineManager.isOnline()) {
-      toast(err.message, 'error');
+    loginOnlineError = err;
+    // Verificar se foi erro de credencial (servidor respondeu) ou erro de rede
+    const isNetworkError = err.message === 'Failed to fetch' || err.message.includes('NetworkError') || err.message === 'Sessão expirada';
+    if (!isNetworkError) {
+      // Erro de credencial - servidor respondeu com erro
+      toast('Usuário ou senha incorretos. Se esqueceu sua senha, solicite ao administrador para resetá-la.', 'error');
       return;
     }
   }
@@ -165,7 +169,12 @@ function showApp() {
   });
 
   populateMonthSelectors();
-  navigateTo('dashboard');
+  // Colaborador cai em Registrar Ponto, admin cai em Dashboard
+  if (currentUser.role === 'admin') {
+    navigateTo('dashboard');
+  } else {
+    navigateTo('ponto');
+  }
 }
 
 // ==================== NAVIGATION ====================
@@ -188,7 +197,8 @@ function navigateTo(page) {
     case 'inconsistencias': break;
     case 'configuracoes': loadConfiguracoes(); break;
     case 'meus-ajustes': loadMeusAjustes(); break;
-    case 'holerites': loadHolerites(); break;
+    case 'meus-abonos': loadMeusAbonos(); break;
+    case 'abonos-admin': loadAbonosAdmin(); break;
   }
 }
 
@@ -727,12 +737,15 @@ async function loadFuncionarios() {
 
     const data = await api.listarFuncionarios({ page: funcPage, limit: 15, busca, departamento, ativo });
 
-    document.getElementById('funcionarios-body').innerHTML = data.funcionarios.map(f => `
-      <tr>
+    document.getElementById('funcionarios-body').innerHTML = data.funcionarios.map(f => {
+      const perfilInfo = f.perfil_nome ? `<span class="badge badge-info">${f.perfil_nome}</span>` :
+        `<span class="badge badge-gray">Sem perfil</span>`;
+      return `<tr>
         <td><strong>${f.nome}</strong></td>
         <td><code>${f.usuario || '-'}</code></td>
         <td>${f.cargo || '-'}</td>
         <td>${f.departamento || '-'}</td>
+        <td>${perfilInfo}</td>
         <td>${f.jornada_semanal}h</td>
         <td><span class="badge ${f.role === 'admin' ? 'badge-info' : 'badge-gray'}">${f.role}</span></td>
         <td>
@@ -746,8 +759,8 @@ async function loadFuncionarios() {
             <button class="btn btn-sm btn-primary" onclick="verEspelho(${f.id})">Espelho</button>
           </div>
         </td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
 
     // Pagination
     let pagHtml = '';
@@ -767,7 +780,7 @@ async function loadFuncionarios() {
 document.getElementById('filtro-busca').addEventListener('input', debounce(() => { funcPage = 1; loadFuncionarios(); }, 300));
 document.getElementById('filtro-ativo').addEventListener('change', () => { funcPage = 1; loadFuncionarios(); });
 
-document.getElementById('btn-novo-funcionario').addEventListener('click', () => {
+document.getElementById('btn-novo-funcionario').addEventListener('click', async () => {
   document.getElementById('modal-func-title').textContent = 'Novo Colaborador';
   document.getElementById('func-id').value = '';
   document.getElementById('func-nome').value = '';
@@ -776,16 +789,20 @@ document.getElementById('btn-novo-funcionario').addEventListener('click', () => 
   document.getElementById('func-senha').value = '';
   document.getElementById('func-cargo').value = '';
   document.getElementById('func-departamento').value = '';
+  document.getElementById('func-perfil-horario').value = '';
+  document.getElementById('func-perfil-info').textContent = '';
   document.getElementById('func-jornada').value = '44';
   document.getElementById('func-role').value = 'funcionario';
   document.getElementById('func-usuario').readOnly = false;
   document.getElementById('func-senha-group').classList.remove('hidden');
+  await populatePerfilDropdowns();
   openModal('modal-funcionario');
 });
 
 async function editarFuncionario(id) {
   try {
     const func = await api.buscarFuncionario(id);
+    await populatePerfilDropdowns();
     document.getElementById('modal-func-title').textContent = 'Editar Colaborador';
     document.getElementById('func-id').value = func.id;
     document.getElementById('func-nome').value = func.nome;
@@ -795,6 +812,8 @@ async function editarFuncionario(id) {
     document.getElementById('func-senha').value = '';
     document.getElementById('func-cargo').value = func.cargo || '';
     document.getElementById('func-departamento').value = func.departamento || '';
+    document.getElementById('func-perfil-horario').value = func.perfil_horario_id || '';
+    document.getElementById('func-perfil-info').textContent = func.perfil_nome || '';
     document.getElementById('func-jornada').value = func.jornada_semanal;
     document.getElementById('func-role').value = func.role;
     document.getElementById('func-senha-group').classList.add('hidden');
@@ -806,6 +825,7 @@ async function editarFuncionario(id) {
 
 document.getElementById('btn-salvar-funcionario').addEventListener('click', async () => {
   const id = document.getElementById('func-id').value;
+  const perfilVal = document.getElementById('func-perfil-horario').value;
   const dados = {
     nome: document.getElementById('func-nome').value,
     usuario: document.getElementById('func-usuario').value,
@@ -813,6 +833,7 @@ document.getElementById('btn-salvar-funcionario').addEventListener('click', asyn
     cargo: document.getElementById('func-cargo').value,
     departamento: document.getElementById('func-departamento').value,
     jornada_semanal: parseFloat(document.getElementById('func-jornada').value),
+    perfil_horario_id: perfilVal ? parseInt(perfilVal) : null,
     role: document.getElementById('func-role').value
   };
 
@@ -1031,19 +1052,19 @@ async function loadConfiguracoes() {
     // Feriados
     const ano = new Date().getFullYear();
     const feriados = await api.listarFeriados(ano);
-    document.getElementById('feriados-body').innerHTML = feriados.map(f => `
-      <tr>
-        <td>${formatDateBR(new Date(f.data + 'T12:00:00'))}</td>
+    document.getElementById('feriados-body').innerHTML = feriados.map(f => {
+      const dataStr = typeof f.data === 'string' ? f.data.substring(0, 10) : new Date(f.data).toISOString().substring(0, 10);
+      const parts = dataStr.split('-');
+      const dataFormatada = parts[2] + '/' + parts[1] + '/' + parts[0];
+      return `<tr>
+        <td>${dataFormatada}</td>
         <td>${f.descricao}</td>
         <td><button class="btn btn-sm btn-danger" onclick="removerFeriado(${f.id})">Remover</button></td>
-      </tr>
-    `).join('') || '<tr><td colspan="3" class="text-center text-muted">Nenhum feriado cadastrado</td></tr>';
+      </tr>`;
+    }).join('') || '<tr><td colspan="3" class="text-center text-muted">Nenhum feriado cadastrado</td></tr>';
 
-    // Colaboradors para horário
-    const funcs = await api.listarFuncionarios({ limit: 100 });
-    document.getElementById('config-funcionario').innerHTML =
-      '<option value="">Selecione...</option>' +
-      funcs.funcionarios.map(f => `<option value="${f.id}">${f.nome}</option>`).join('');
+    // Perfis de horário
+    await loadPerfisHorario();
 
   } catch (err) { toast(err.message, 'error'); }
 }
@@ -1083,136 +1104,303 @@ async function removerFeriado(id) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
-// Horários de trabalho
-document.getElementById('config-funcionario').addEventListener('change', async (e) => {
-  const funcId = e.target.value;
-  if (!funcId) { document.getElementById('config-horarios-grid').innerHTML = ''; return; }
-
+// ==================== PERFIS DE HORÁRIO ====================
+async function loadPerfisHorario() {
   try {
-    const horarios = await api.buscarHorarios(funcId);
-    const dias = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-    const horariosMap = {};
-    horarios.forEach(h => { horariosMap[h.dia_semana] = h; });
+    const perfis = await api.listarPerfisHorario();
+    const tbody = document.getElementById('perfis-horario-body');
+    if (!tbody) return;
 
-    document.getElementById('config-horarios-grid').innerHTML = `
-      <table>
-        <thead><tr><th>Dia</th><th>Entrada</th><th>Saída Almoço</th><th>Retorno Almoço</th><th>Saída</th></tr></thead>
-        <tbody>
-          ${dias.map((dia, i) => {
-            const h = horariosMap[i] || {};
-            return `<tr>
-              <td><strong>${dia}</strong></td>
-              <td><input type="time" class="form-control horario-input" data-dia="${i}" data-tipo="entrada" value="${h.hora_entrada || ''}"></td>
-              <td><input type="time" class="form-control horario-input" data-dia="${i}" data-tipo="saida_almoco" value="${h.hora_saida_almoco || ''}"></td>
-              <td><input type="time" class="form-control horario-input" data-dia="${i}" data-tipo="retorno_almoco" value="${h.hora_retorno_almoco || ''}"></td>
-              <td><input type="time" class="form-control horario-input" data-dia="${i}" data-tipo="saida" value="${h.hora_saida || ''}"></td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    `;
+    tbody.innerHTML = perfis.map(p => {
+      const entrada = (p.hora_entrada || '').substring(0, 5);
+      const saidaAlm = (p.hora_saida_almoco || '').substring(0, 5);
+      const retornoAlm = (p.hora_retorno_almoco || '').substring(0, 5);
+      const saida = (p.hora_saida || '').substring(0, 5);
+      const jornada = calcJornadaPerfil(p);
+      return `<tr>
+        <td><strong>${p.nome}</strong></td>
+        <td>${entrada}</td>
+        <td>${saidaAlm || '-'}</td>
+        <td>${retornoAlm || '-'}</td>
+        <td>${saida}</td>
+        <td>${jornada}</td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="editarPerfil(${p.id})">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="excluirPerfil(${p.id})">Excluir</button>
+        </td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="7" class="text-center text-muted">Nenhum perfil cadastrado</td></tr>';
+
+    // Atualizar dropdowns de perfil em outros lugares
+    await populatePerfilDropdowns(perfis);
   } catch (err) { toast(err.message, 'error'); }
-});
-
-document.getElementById('btn-salvar-horarios').addEventListener('click', async () => {
-  const funcId = document.getElementById('config-funcionario').value;
-  if (!funcId) { toast('Selecione um colaborador', 'error'); return; }
-
-  const inputs = document.querySelectorAll('.horario-input');
-  const horariosMap = {};
-
-  inputs.forEach(input => {
-    const dia = parseInt(input.dataset.dia);
-    const tipo = input.dataset.tipo;
-    if (!horariosMap[dia]) horariosMap[dia] = { dia_semana: dia };
-    const field = tipo === 'entrada' ? 'hora_entrada' :
-                  tipo === 'saida_almoco' ? 'hora_saida_almoco' :
-                  tipo === 'retorno_almoco' ? 'hora_retorno_almoco' : 'hora_saida';
-    horariosMap[dia][field] = input.value || null;
-  });
-
-  const horarios = Object.values(horariosMap).filter(h =>
-    h.hora_entrada || h.hora_saida_almoco || h.hora_retorno_almoco || h.hora_saida
-  );
-
-  try {
-    await api.salvarHorarios(funcId, horarios);
-    toast('Horários salvos!', 'success');
-  } catch (err) { toast(err.message, 'error'); }
-});
-
-// ==================== HOLERITES (ESPELHO DO COLABORADOR) ====================
-function loadHolerites() {
-  // Apenas popula selectors, espera o usuario clicar em Gerar
 }
 
-document.getElementById('btn-gerar-holerite').addEventListener('click', async () => {
-  const mes = document.getElementById('holerite-mes').value;
-  const ano = document.getElementById('holerite-ano').value;
+function calcJornadaPerfil(p) {
+  if (!p.hora_entrada || !p.hora_saida) return '-';
+  const toMin = (t) => { const parts = t.split(':'); return parseInt(parts[0]) * 60 + parseInt(parts[1]); };
+  const entrada = toMin(p.hora_entrada);
+  const saida = toMin(p.hora_saida);
+  let totalMin = saida - entrada;
+  if (p.hora_saida_almoco && p.hora_retorno_almoco) {
+    totalMin -= (toMin(p.hora_retorno_almoco) - toMin(p.hora_saida_almoco));
+  }
+  const dias = p.dias_trabalho ? p.dias_trabalho.split(',').length : 5;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  const semanal = ((totalMin * dias) / 60).toFixed(1);
+  return `${h}h${m > 0 ? m + 'min' : ''}/dia (${semanal}h/sem)`;
+}
+
+async function populatePerfilDropdowns(perfis) {
+  if (!perfis) perfis = await api.listarPerfisHorario();
+  const selects = document.querySelectorAll('#func-perfil-horario');
+  selects.forEach(sel => {
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">Nenhum (definir manualmente)</option>' +
+      perfis.map(p => `<option value="${p.id}">${p.nome} (${(p.hora_entrada||'').substring(0,5)} - ${(p.hora_saida||'').substring(0,5)})</option>`).join('');
+    if (currentVal) sel.value = currentVal;
+  });
+}
+
+document.getElementById('btn-novo-perfil').addEventListener('click', () => {
+  document.getElementById('modal-perfil-title').textContent = 'Novo Perfil de Horário';
+  document.getElementById('perfil-id').value = '';
+  document.getElementById('perfil-nome').value = '';
+  document.getElementById('perfil-entrada').value = '';
+  document.getElementById('perfil-saida-almoco').value = '';
+  document.getElementById('perfil-retorno-almoco').value = '';
+  document.getElementById('perfil-saida').value = '';
+  document.getElementById('perfil-jornada-calc').textContent = '-';
+  // Reset dias: marcar seg-sex
+  document.querySelectorAll('#perfil-dias input').forEach(cb => {
+    cb.checked = ['1','2','3','4','5'].includes(cb.value);
+  });
+  openModal('modal-perfil-horario');
+});
+
+async function editarPerfil(id) {
+  try {
+    const p = await api.buscarPerfilHorario(id);
+    document.getElementById('modal-perfil-title').textContent = 'Editar Perfil de Horário';
+    document.getElementById('perfil-id').value = p.id;
+    document.getElementById('perfil-nome').value = p.nome;
+    document.getElementById('perfil-entrada').value = (p.hora_entrada || '').substring(0, 5);
+    document.getElementById('perfil-saida-almoco').value = (p.hora_saida_almoco || '').substring(0, 5);
+    document.getElementById('perfil-retorno-almoco').value = (p.hora_retorno_almoco || '').substring(0, 5);
+    document.getElementById('perfil-saida').value = (p.hora_saida || '').substring(0, 5);
+    const diasAtivos = (p.dias_trabalho || '1,2,3,4,5').split(',');
+    document.querySelectorAll('#perfil-dias input').forEach(cb => {
+      cb.checked = diasAtivos.includes(cb.value);
+    });
+    updatePerfilJornadaCalc();
+    openModal('modal-perfil-horario');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function excluirPerfil(id) {
+  if (!confirm('Excluir este perfil? Os colaboradores vinculados ficarão sem perfil.')) return;
+  try {
+    await api.excluirPerfilHorario(id);
+    toast('Perfil removido', 'success');
+    loadPerfisHorario();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+document.getElementById('btn-salvar-perfil').addEventListener('click', async () => {
+  const id = document.getElementById('perfil-id').value;
+  const diasChecked = [];
+  document.querySelectorAll('#perfil-dias input:checked').forEach(cb => diasChecked.push(cb.value));
+
+  const dados = {
+    nome: document.getElementById('perfil-nome').value,
+    hora_entrada: document.getElementById('perfil-entrada').value,
+    hora_saida_almoco: document.getElementById('perfil-saida-almoco').value || null,
+    hora_retorno_almoco: document.getElementById('perfil-retorno-almoco').value || null,
+    hora_saida: document.getElementById('perfil-saida').value,
+    dias_trabalho: diasChecked.join(',')
+  };
+
+  if (!dados.nome || !dados.hora_entrada || !dados.hora_saida) {
+    toast('Nome, entrada e saída são obrigatórios', 'error');
+    return;
+  }
 
   try {
-    const data = await api.espelhoPonto(mes, ano);
-    const func = data.funcionario;
-    const meses = ['Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    if (id) {
+      await api.editarPerfilHorario(id, dados);
+      toast('Perfil atualizado!', 'success');
+    } else {
+      await api.criarPerfilHorario(dados);
+      toast('Perfil criado!', 'success');
+    }
+    closeModal('modal-perfil-horario');
+    loadPerfisHorario();
+  } catch (err) { toast(err.message, 'error'); }
+});
 
-    const diasSemana = { 'Sun': 'Dom', 'Mon': 'Seg', 'Tue': 'Ter', 'Wed': 'Qua', 'Thu': 'Qui', 'Fri': 'Sex', 'Sat': 'Sab' };
+function updatePerfilJornadaCalc() {
+  const entrada = document.getElementById('perfil-entrada').value;
+  const saida = document.getElementById('perfil-saida').value;
+  const saidaAlm = document.getElementById('perfil-saida-almoco').value;
+  const retornoAlm = document.getElementById('perfil-retorno-almoco').value;
+  const diasChecked = document.querySelectorAll('#perfil-dias input:checked').length;
+  const el = document.getElementById('perfil-jornada-calc');
 
-    let html = '<div class="espelho-header">';
-    html += '<div style="text-align:center;margin-bottom:16px;">';
-    html += '<h2 style="color:var(--ccf-blue);margin:0;">Espelho de Ponto</h2>';
-    html += '<p class="text-muted">' + meses[parseInt(mes) - 1] + ' de ' + ano + '</p>';
-    html += '</div>';
-    html += '<div class="info-grid">';
-    html += '<div class="info-item"><strong>Colaborador:</strong> ' + func.nome + '</div>';
-    html += '<div class="info-item"><strong>Cargo:</strong> ' + (func.cargo || '-') + '</div>';
-    html += '<div class="info-item"><strong>Departamento:</strong> ' + (func.departamento || '-') + '</div>';
-    html += '<div class="info-item"><strong>Jornada:</strong> ' + func.jornada_semanal + 'h semanais</div>';
-    html += '</div></div>';
+  if (!entrada || !saida) { el.textContent = '-'; return; }
+  const calc = calcJornadaPerfil({
+    hora_entrada: entrada, hora_saida: saida,
+    hora_saida_almoco: saidaAlm, hora_retorno_almoco: retornoAlm,
+    dias_trabalho: Array.from(document.querySelectorAll('#perfil-dias input:checked')).map(c => c.value).join(',')
+  });
+  el.textContent = calc;
+}
 
-    html += '<div class="table-container"><table><thead><tr>';
-    html += '<th>Data</th><th>Dia</th><th>Entrada</th><th>Saida Almoco</th><th>Retorno</th><th>Saida</th><th>Total</th><th>Status</th>';
-    html += '</tr></thead><tbody>';
+['perfil-entrada', 'perfil-saida', 'perfil-saida-almoco', 'perfil-retorno-almoco'].forEach(id => {
+  document.getElementById(id).addEventListener('change', updatePerfilJornadaCalc);
+});
+document.querySelectorAll('#perfil-dias input').forEach(cb => {
+  cb.addEventListener('change', updatePerfilJornadaCalc);
+});
 
-    data.dias.forEach(function(d) {
-      const dia = new Date(d.data + 'T12:00:00');
-      const diaSemana = diasSemana[dia.toLocaleDateString('en', { weekday: 'short' })] || d.diaSemana;
-      const dataFormatada = d.data.split('-').reverse().join('/');
-      const statusBadge = getStatusBadge(d.status);
-      const muted = (d.status === 'fim_de_semana' || d.status === 'feriado') ? ' class="text-muted"' : '';
+// Dropdown de perfil no form de colaborador
+document.getElementById('func-perfil-horario').addEventListener('change', async (e) => {
+  const perfilId = e.target.value;
+  const info = document.getElementById('func-perfil-info');
+  if (!perfilId) { info.textContent = ''; return; }
+  try {
+    const p = await api.buscarPerfilHorario(perfilId);
+    const jornada = calcJornadaPerfil(p);
+    info.textContent = `${(p.hora_entrada||'').substring(0,5)} - ${(p.hora_saida||'').substring(0,5)} | ${jornada}`;
+    // Atualizar jornada semanal automaticamente
+    if (p.hora_entrada && p.hora_saida) {
+      const toMin = (t) => { const parts = t.split(':'); return parseInt(parts[0]) * 60 + parseInt(parts[1]); };
+      let totalMin = toMin(p.hora_saida) - toMin(p.hora_entrada);
+      if (p.hora_saida_almoco && p.hora_retorno_almoco) {
+        totalMin -= (toMin(p.hora_retorno_almoco) - toMin(p.hora_saida_almoco));
+      }
+      const dias = p.dias_trabalho ? p.dias_trabalho.split(',').length : 5;
+      document.getElementById('func-jornada').value = ((totalMin * dias) / 60).toFixed(1);
+    }
+  } catch (err) { info.textContent = ''; }
+});
 
-      html += '<tr' + muted + '>';
-      html += '<td>' + dataFormatada + '</td>';
-      html += '<td>' + diaSemana + '</td>';
-      html += '<td>' + (d.entrada || '-') + '</td>';
-      html += '<td>' + (d.saida_almoco || '-') + '</td>';
-      html += '<td>' + (d.retorno_almoco || '-') + '</td>';
-      html += '<td>' + (d.saida || '-') + '</td>';
-      html += '<td><strong>' + d.trabalhado + '</strong></td>';
-      html += '<td>' + statusBadge + (d.feriado ? ' <small>(' + d.feriado + ')</small>' : '') + '</td>';
-      html += '</tr>';
-    });
+// ==================== ABONOS ====================
+const ABONO_TIPOS = {
+  'atestado': 'Atestado Médico',
+  'abono_horas': 'Abono de Horas',
+  'compensacao': 'Compensação'
+};
 
-    html += '</tbody></table></div>';
+function formatAbonoPeriodo(a) {
+  const ini = typeof a.data_inicio === 'string' ? a.data_inicio.substring(0, 10) : new Date(a.data_inicio).toISOString().substring(0, 10);
+  const fim = typeof a.data_fim === 'string' ? a.data_fim.substring(0, 10) : new Date(a.data_fim).toISOString().substring(0, 10);
+  const iniF = ini.split('-').reverse().join('/');
+  const fimF = fim.split('-').reverse().join('/');
+  return ini === fim ? iniF : iniF + ' a ' + fimF;
+}
 
-    // Resumo
-    html += '<div class="stats-grid mt-3">';
-    html += '<div class="stat-card"><div class="stat-icon blue">&#9201;</div><div class="stat-info"><h4>' + data.resumo.totalTrabalhado + '</h4><p>Total Trabalhado</p></div></div>';
-    html += '<div class="stat-card"><div class="stat-icon green">&#128200;</div><div class="stat-info"><h4>' + data.resumo.totalExtras + '</h4><p>Horas Extras</p></div></div>';
-    html += '<div class="stat-card"><div class="stat-icon red">&#10060;</div><div class="stat-info"><h4>' + data.resumo.totalFaltas + '</h4><p>Faltas</p></div></div>';
-    html += '<div class="stat-card"><div class="stat-icon yellow">&#128197;</div><div class="stat-info"><h4>' + data.resumo.jornadaMensal + '</h4><p>Jornada Mensal</p></div></div>';
-    html += '</div>';
+// Meus Abonos (colaborador)
+async function loadMeusAbonos() {
+  try {
+    const abonos = await api.meusAbonos();
+    document.getElementById('meus-abonos-body').innerHTML = abonos.map(a => `
+      <tr>
+        <td><span class="badge badge-info">${ABONO_TIPOS[a.tipo] || a.tipo}</span></td>
+        <td>${formatAbonoPeriodo(a)}</td>
+        <td>${a.horas ? a.horas + 'h' : 'Dia inteiro'}</td>
+        <td>${a.motivo}</td>
+        <td>${getStatusBadge(a.status)}${a.motivo_rejeicao ? '<br><small class="text-danger">' + a.motivo_rejeicao + '</small>' : ''}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" class="text-center text-muted">Nenhum abono solicitado</td></tr>';
+  } catch (err) { toast(err.message, 'error'); }
+}
 
-    document.getElementById('holerite-preview').innerHTML = html;
-  } catch (err) {
-    toast(err.message, 'error');
+document.getElementById('btn-solicitar-abono').addEventListener('click', () => {
+  document.getElementById('abono-tipo').value = 'atestado';
+  document.getElementById('abono-data-inicio').value = '';
+  document.getElementById('abono-data-fim').value = '';
+  document.getElementById('abono-horas').value = '';
+  document.getElementById('abono-motivo').value = '';
+  openModal('modal-abono');
+});
+
+document.getElementById('btn-salvar-abono').addEventListener('click', async () => {
+  const tipo = document.getElementById('abono-tipo').value;
+  const data_inicio = document.getElementById('abono-data-inicio').value;
+  const data_fim = document.getElementById('abono-data-fim').value;
+  const horas = document.getElementById('abono-horas').value;
+  const motivo = document.getElementById('abono-motivo').value;
+
+  if (!data_inicio || !data_fim || !motivo) {
+    toast('Preencha data início, data fim e motivo', 'error');
+    return;
   }
+
+  try {
+    await api.solicitarAbono({ tipo, data_inicio, data_fim, horas: horas || null, motivo });
+    toast('Solicitação de abono enviada!', 'success');
+    closeModal('modal-abono');
+    loadMeusAbonos();
+  } catch (err) { toast(err.message, 'error'); }
 });
 
-document.getElementById('btn-holerite-pdf').addEventListener('click', () => {
-  const mes = document.getElementById('holerite-mes').value;
-  const ano = document.getElementById('holerite-ano').value;
-  window.open(API_BASE + '/relatorios/exportar/pdf?mes=' + mes + '&ano=' + ano + '&funcionario_id=' + currentUser.id, '_blank');
+// Abonos Admin
+async function loadAbonosAdmin() {
+  try {
+    const status = document.getElementById('abonos-filtro-status').value;
+    const tipo = document.getElementById('abonos-filtro-tipo').value;
+    const abonos = await api.todosAbonos({ status, tipo });
+
+    document.getElementById('abonos-admin-body').innerHTML = abonos.map(a => {
+      const acoes = a.status === 'pendente' ?
+        `<div class="btn-group">
+          <button class="btn btn-sm btn-success" onclick="aprovarAbono(${a.id})">Aprovar</button>
+          <button class="btn btn-sm btn-danger" onclick="abrirRejeicaoAbono(${a.id})">Rejeitar</button>
+        </div>` :
+        `<small class="text-muted">${a.admin_nome ? 'por ' + a.admin_nome : '-'}</small>`;
+
+      return `<tr>
+        <td><strong>${a.funcionario_nome}</strong><br><small class="text-muted">${a.departamento || ''}</small></td>
+        <td><span class="badge badge-info">${ABONO_TIPOS[a.tipo] || a.tipo}</span></td>
+        <td>${formatAbonoPeriodo(a)}</td>
+        <td>${a.horas ? a.horas + 'h' : 'Dia inteiro'}</td>
+        <td>${a.motivo}</td>
+        <td>${getStatusBadge(a.status)}${a.motivo_rejeicao ? '<br><small class="text-danger">' + a.motivo_rejeicao + '</small>' : ''}</td>
+        <td>${acoes}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="7" class="text-center text-muted">Nenhum abono encontrado</td></tr>';
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function aprovarAbono(id) {
+  if (!confirm('Aprovar este abono?')) return;
+  try {
+    await api.aprovarAbono(id);
+    toast('Abono aprovado!', 'success');
+    loadAbonosAdmin();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function abrirRejeicaoAbono(id) {
+  document.getElementById('rejeitar-abono-id').value = id;
+  document.getElementById('rejeitar-abono-motivo').value = '';
+  openModal('modal-rejeitar-abono');
+}
+
+document.getElementById('btn-confirmar-rejeitar-abono').addEventListener('click', async () => {
+  const id = document.getElementById('rejeitar-abono-id').value;
+  const motivo = document.getElementById('rejeitar-abono-motivo').value;
+  try {
+    await api.rejeitarAbono(id, motivo);
+    toast('Abono rejeitado', 'success');
+    closeModal('modal-rejeitar-abono');
+    loadAbonosAdmin();
+  } catch (err) { toast(err.message, 'error'); }
 });
+
+document.getElementById('abonos-filtro-status').addEventListener('change', loadAbonosAdmin);
+document.getElementById('abonos-filtro-tipo').addEventListener('change', loadAbonosAdmin);
 
 // ==================== AUTO UPDATE UI ====================
 function setupUpdateListener() {
@@ -1294,8 +1482,8 @@ function formatDateBRFull(d) {
 function getStatusBadge(status) {
   const badges = {
     'normal': '',
-    'fim_de_semana': '<span class="badge badge-gray">FDS</span>',
-    'feriado': '<span class="badge badge-info">Feriado</span>',
+    'fim_de_semana': '<span class="badge badge-gray">\u{1F334} Final de Semana</span>',
+    'feriado': '<span class="badge badge-info">\u{1F334} Feriado</span>',
     'falta': '<span class="badge badge-danger">Falta</span>',
     'atestado': '<span class="badge badge-warning">Atestado</span>',
     'sem_registro': '<span class="badge badge-danger">Sem Registro</span>',
@@ -1310,8 +1498,8 @@ function populateMonthSelectors() {
   const now = new Date();
   const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-  const mesSelectors = ['espelho-mes', 'rel-mes', 'incon-mes', 'holerite-mes'];
-  const anoSelectors = ['espelho-ano', 'rel-ano', 'incon-ano', 'holerite-ano'];
+  const mesSelectors = ['espelho-mes', 'rel-mes', 'incon-mes'];
+  const anoSelectors = ['espelho-ano', 'rel-ano', 'incon-ano'];
 
   mesSelectors.forEach(id => {
     const sel = document.getElementById(id);

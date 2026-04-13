@@ -36,7 +36,7 @@ class Api {
 
     const res = await fetch(`${API_BASE}${path}`, opts);
 
-    if (res.status === 401) {
+    if (res.status === 401 && path !== '/auth/login') {
       this.setToken(null);
       this.setUser(null);
       window.location.reload();
@@ -116,6 +116,24 @@ class Api {
 
   // Dashboard
   dashboardAdmin() { return this.request('GET', '/dashboard/admin'); }
+
+  // Abonos
+  solicitarAbono(dados) { return this.request('POST', '/abonos/solicitar', dados); }
+  meusAbonos() { return this.request('GET', '/abonos/meus'); }
+  abonosPendentes() { return this.request('GET', '/abonos/pendentes'); }
+  todosAbonos(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request('GET', `/abonos/todos?${qs}`);
+  }
+  aprovarAbono(id) { return this.request('POST', `/abonos/${id}/aprovar`); }
+  rejeitarAbono(id, motivo) { return this.request('POST', `/abonos/${id}/rejeitar`, { motivo }); }
+
+  // Perfis de Horário
+  listarPerfisHorario() { return this.request('GET', '/configuracoes/perfis-horario'); }
+  buscarPerfilHorario(id) { return this.request('GET', `/configuracoes/perfis-horario/${id}`); }
+  criarPerfilHorario(dados) { return this.request('POST', '/configuracoes/perfis-horario', dados); }
+  editarPerfilHorario(id, dados) { return this.request('PUT', `/configuracoes/perfis-horario/${id}`, dados); }
+  excluirPerfilHorario(id) { return this.request('DELETE', `/configuracoes/perfis-horario/${id}`); }
 
   // Configurações
   buscarHorarios(funcionarioId) { return this.request('GET', `/configuracoes/horario/${funcionarioId}`); }

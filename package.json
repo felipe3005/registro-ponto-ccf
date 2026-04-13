@@ -1,6 +1,6 @@
 {
   "name": "registro-ponto-ccf",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "main": "main.js",
   "description": "Sistema de Registro de Ponto Digital - CCF",
   "author": "CCF",

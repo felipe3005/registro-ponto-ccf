@@ -68,22 +68,21 @@
       </div>
       <nav class="sidebar-nav">
         <div class="nav-section">Principal</div>
-        <a href="#" data-page="dashboard" class="active"><span class="icon">&#128200;</span> Dashboard</a>
-        <a href="#" data-page="ponto" class="func-only"><span class="icon">&#9201;</span> Registrar Ponto</a>
+        <a href="#" data-page="ponto" class="func-only active"><span class="icon">&#9201;</span> Registrar Ponto</a>
+        <a href="#" data-page="dashboard"><span class="icon">&#128200;</span> Dashboard</a>
         <a href="#" data-page="meu-espelho" class="func-only"><span class="icon">&#128196;</span> Meu Espelho</a>
 
         <div class="nav-section" id="nav-admin-section">Administra&ccedil;&atilde;o</div>
         <a href="#" data-page="funcionarios" class="admin-only"><span class="icon">&#128101;</span> Colaboradores</a>
         <a href="#" data-page="ajustes-admin" class="admin-only"><span class="icon">&#9989;</span> Ajustes Pendentes</a>
+        <a href="#" data-page="abonos-admin" class="admin-only"><span class="icon">&#128203;</span> Abonos</a>
         <a href="#" data-page="relatorios" class="admin-only"><span class="icon">&#128202;</span> Relat&oacute;rios</a>
         <a href="#" data-page="inconsistencias" class="admin-only"><span class="icon">&#9888;</span> Inconsist&ecirc;ncias</a>
         <a href="#" data-page="configuracoes" class="admin-only"><span class="icon">&#9881;</span> Configura&ccedil;&otilde;es</a>
 
-        <div class="nav-section func-only">Documentos</div>
-        <a href="#" data-page="holerites" class="func-only"><span class="icon">&#128179;</span> Meus Holerites</a>
-
         <div class="nav-section func-only">Solicita&ccedil;&otilde;es</div>
         <a href="#" data-page="meus-ajustes" class="func-only"><span class="icon">&#128221;</span> Meus Ajustes</a>
+        <a href="#" data-page="meus-abonos" class="func-only"><span class="icon">&#128203;</span> Meus Abonos</a>
       </nav>
       <div class="sidebar-footer">
         <div class="user-info">
@@ -100,7 +99,7 @@
     <!-- Main Content -->
     <main class="main-content">
       <!-- DASHBOARD FUNCIONARIO -->
-      <div id="page-dashboard" class="page">
+      <div id="page-dashboard" class="page hidden">
         <div class="page-header"><h1>Dashboard</h1><span id="dashboard-date"></span></div>
         <div class="page-body">
           <!-- Dashboard do funcionário -->
@@ -159,7 +158,7 @@
       </div>
 
       <!-- REGISTRAR PONTO -->
-      <div id="page-ponto" class="page hidden">
+      <div id="page-ponto" class="page">
         <div class="page-header"><h1>Registrar Ponto</h1></div>
         <div class="page-body">
           <div class="card">
@@ -214,7 +213,14 @@
         <div class="page-body">
           <div class="filter-bar">
             <input type="text" id="filtro-busca" class="form-control" placeholder="Buscar por nome, usu&aacute;rio...">
-            <select id="filtro-depto" class="form-control"><option value="">Todos os departamentos</option></select>
+            <select id="filtro-depto" class="form-control">
+              <option value="">Todos os departamentos</option>
+              <option value="Tecnologia">Tecnologia</option>
+              <option value="Operacional">Operacional</option>
+              <option value="Suporte">Suporte</option>
+              <option value="Atendimento">Atendimento</option>
+              <option value="Diretoria">Diretoria</option>
+            </select>
             <select id="filtro-ativo" class="form-control">
               <option value="1">Ativos</option><option value="0">Inativos</option>
             </select>
@@ -225,7 +231,7 @@
                 <thead>
                   <tr>
                     <th>Nome</th><th>Usu&aacute;rio</th><th>Cargo</th><th>Depto</th>
-                    <th>Jornada</th><th>Role</th><th>A&ccedil;&otilde;es</th>
+                    <th>Perfil Hor&aacute;rio</th><th>Jornada</th><th>Role</th><th>A&ccedil;&otilde;es</th>
                   </tr>
                 </thead>
                 <tbody id="funcionarios-body"></tbody>
@@ -334,34 +340,27 @@
             </div>
           </div>
 
-          <!-- Horários -->
+          <!-- Perfis de Horário -->
           <div class="card">
-            <div class="card-header"><h3>Hor&aacute;rios de Trabalho</h3></div>
-            <div class="form-group">
-              <label>Colaborador</label>
-              <select id="config-funcionario" class="form-control"></select>
+            <div class="card-header">
+              <h3>Perfis de Hor&aacute;rio</h3>
+              <button class="btn btn-primary btn-sm" id="btn-novo-perfil">+ Novo Perfil</button>
             </div>
-            <div id="config-horarios-grid"></div>
-            <button class="btn btn-primary mt-2" id="btn-salvar-horarios">Salvar Hor&aacute;rios</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- HOLERITES -->
-      <div id="page-holerites" class="page hidden">
-        <div class="page-header">
-          <h1>Meus Holerites</h1>
-          <div class="btn-group">
-            <select id="holerite-mes" class="form-control"></select>
-            <select id="holerite-ano" class="form-control"></select>
-            <button class="btn btn-primary" id="btn-gerar-holerite">Gerar</button>
-            <button class="btn btn-secondary" id="btn-holerite-pdf">Baixar PDF</button>
-          </div>
-        </div>
-        <div class="page-body">
-          <div class="card" id="holerite-preview">
-            <div class="text-center text-muted" style="padding:40px;">
-              Selecione o m&ecirc;s e clique em "Gerar" para visualizar seu holerite.
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Entrada</th>
+                    <th>Sa&iacute;da Almo&ccedil;o</th>
+                    <th>Retorno Almo&ccedil;o</th>
+                    <th>Sa&iacute;da</th>
+                    <th>Jornada</th>
+                    <th>A&ccedil;&otilde;es</th>
+                  </tr>
+                </thead>
+                <tbody id="perfis-horario-body"></tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -381,6 +380,72 @@
                   <tr><th>Data</th><th>Tipo</th><th>Nova Hora</th><th>Motivo</th><th>Status</th></tr>
                 </thead>
                 <tbody id="meus-ajustes-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- MEUS ABONOS (colaborador) -->
+      <div id="page-meus-abonos" class="page hidden">
+        <div class="page-header">
+          <h1>Meus Abonos</h1>
+          <button class="btn btn-primary" id="btn-solicitar-abono">+ Solicitar Abono</button>
+        </div>
+        <div class="page-body">
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Per&iacute;odo</th>
+                    <th>Horas</th>
+                    <th>Motivo</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="meus-abonos-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ABONOS (admin) -->
+      <div id="page-abonos-admin" class="page hidden">
+        <div class="page-header">
+          <h1>Gerenciar Abonos</h1>
+          <div class="btn-group">
+            <select id="abonos-filtro-status" class="form-control">
+              <option value="pendente">Pendentes</option>
+              <option value="">Todos</option>
+              <option value="aprovado">Aprovados</option>
+              <option value="rejeitado">Rejeitados</option>
+            </select>
+            <select id="abonos-filtro-tipo" class="form-control">
+              <option value="">Todos os tipos</option>
+              <option value="atestado">Atestado</option>
+              <option value="abono_horas">Abono de Horas</option>
+              <option value="compensacao">Compensa&ccedil;&atilde;o</option>
+            </select>
+          </div>
+        </div>
+        <div class="page-body">
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Colaborador</th>
+                    <th>Tipo</th>
+                    <th>Per&iacute;odo</th>
+                    <th>Horas</th>
+                    <th>Motivo</th>
+                    <th>Status</th>
+                    <th>A&ccedil;&otilde;es</th>
+                  </tr>
+                </thead>
+                <tbody id="abonos-admin-body"></tbody>
               </table>
             </div>
           </div>
@@ -425,8 +490,22 @@
             </div>
             <div class="form-group">
               <label>Departamento</label>
-              <input type="text" id="func-departamento" class="form-control">
+              <select id="func-departamento" class="form-control">
+                <option value="">Selecione...</option>
+                <option value="Tecnologia">Tecnologia</option>
+                <option value="Operacional">Operacional</option>
+                <option value="Suporte">Suporte</option>
+                <option value="Atendimento">Atendimento</option>
+                <option value="Diretoria">Diretoria</option>
+              </select>
             </div>
+          </div>
+          <div class="form-group">
+            <label>Perfil de Hor&aacute;rio</label>
+            <select id="func-perfil-horario" class="form-control">
+              <option value="">Nenhum (definir manualmente)</option>
+            </select>
+            <small class="text-muted" id="func-perfil-info"></small>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -434,7 +513,7 @@
               <input type="number" id="func-jornada" class="form-control" value="44" step="0.5">
             </div>
             <div class="form-group">
-              <label>Perfil</label>
+              <label>N&iacute;vel de Acesso</label>
               <select id="func-role" class="form-control">
                 <option value="funcionario">Colaborador</option>
                 <option value="admin">Administrador</option>
@@ -507,6 +586,126 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-feriado')">Cancelar</button>
         <button class="btn btn-primary" id="btn-salvar-feriado">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PERFIL DE HORÁRIO -->
+  <div class="modal-overlay" id="modal-perfil-horario">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-perfil-title">Novo Perfil de Hor&aacute;rio</h3>
+        <button class="modal-close" onclick="closeModal('modal-perfil-horario')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="perfil-id">
+        <div class="form-group">
+          <label>Nome do Perfil *</label>
+          <input type="text" id="perfil-nome" class="form-control" placeholder="Ex: Comercial 09-18h">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Entrada *</label>
+            <input type="time" id="perfil-entrada" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label>Sa&iacute;da Almo&ccedil;o</label>
+            <input type="time" id="perfil-saida-almoco" class="form-control">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Retorno Almo&ccedil;o</label>
+            <input type="time" id="perfil-retorno-almoco" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>Sa&iacute;da *</label>
+            <input type="time" id="perfil-saida" class="form-control" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Dias de Trabalho</label>
+          <div class="dias-trabalho-group" id="perfil-dias">
+            <label class="checkbox-inline"><input type="checkbox" value="1" checked> Seg</label>
+            <label class="checkbox-inline"><input type="checkbox" value="2" checked> Ter</label>
+            <label class="checkbox-inline"><input type="checkbox" value="3" checked> Qua</label>
+            <label class="checkbox-inline"><input type="checkbox" value="4" checked> Qui</label>
+            <label class="checkbox-inline"><input type="checkbox" value="5" checked> Sex</label>
+            <label class="checkbox-inline"><input type="checkbox" value="6"> S&aacute;b</label>
+            <label class="checkbox-inline"><input type="checkbox" value="0"> Dom</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Jornada calculada</label>
+          <div id="perfil-jornada-calc" class="text-muted">-</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-perfil-horario')">Cancelar</button>
+        <button class="btn btn-primary" id="btn-salvar-perfil">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL SOLICITAR ABONO -->
+  <div class="modal-overlay" id="modal-abono">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Solicitar Abono</h3>
+        <button class="modal-close" onclick="closeModal('modal-abono')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Tipo *</label>
+          <select id="abono-tipo" class="form-control" required>
+            <option value="atestado">Atestado M&eacute;dico</option>
+            <option value="abono_horas">Abono de Horas</option>
+            <option value="compensacao">Compensa&ccedil;&atilde;o</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Data In&iacute;cio *</label>
+            <input type="date" id="abono-data-inicio" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label>Data Fim *</label>
+            <input type="date" id="abono-data-fim" class="form-control" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Horas (opcional, para abono parcial)</label>
+          <input type="number" id="abono-horas" class="form-control" step="0.5" min="0" placeholder="Ex: 2.5">
+        </div>
+        <div class="form-group">
+          <label>Motivo / Justificativa *</label>
+          <textarea id="abono-motivo" class="form-control" rows="3" placeholder="Descreva o motivo do abono..." required></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-abono')">Cancelar</button>
+        <button class="btn btn-primary" id="btn-salvar-abono">Enviar Solicita&ccedil;&atilde;o</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL REJEITAR ABONO (admin) -->
+  <div class="modal-overlay" id="modal-rejeitar-abono">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Rejeitar Abono</h3>
+        <button class="modal-close" onclick="closeModal('modal-rejeitar-abono')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="rejeitar-abono-id">
+        <div class="form-group">
+          <label>Motivo da Rejei&ccedil;&atilde;o</label>
+          <textarea id="rejeitar-abono-motivo" class="form-control" rows="3" placeholder="Informe o motivo da rejei&ccedil;&atilde;o..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-rejeitar-abono')">Cancelar</button>
+        <button class="btn btn-danger" id="btn-confirmar-rejeitar-abono">Rejeitar</button>
       </div>
     </div>
   </div>

@@ -12,6 +12,7 @@ const ajustesRoutes = require('./routes/ajustes');
 const relatoriosRoutes = require('./routes/relatorios');
 const configuracoesRoutes = require('./routes/configuracoes');
 const dashboardRoutes = require('./routes/dashboard');
+const abonosRoutes = require('./routes/abonos');
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/api/horas', horasRoutes);
 app.use('/api/ajustes', ajustesRoutes);
 app.use('/api/relatorios', relatoriosRoutes);
 app.use('/api/configuracoes', configuracoesRoutes);
+app.use('/api/abonos', abonosRoutes);
 
 // Servir frontend
 app.get('/{*path}', (req, res) => {

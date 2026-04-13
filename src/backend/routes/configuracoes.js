@@ -4,6 +4,83 @@ const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
+// ==================== PERFIS DE HORÁRIO ====================
+
+// Listar perfis
+router.get('/perfis-horario', authMiddleware, async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT * FROM rp_perfis_horario ORDER BY nome');
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro ao listar perfis:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Buscar perfil por ID
+router.get('/perfis-horario/:id', authMiddleware, async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT * FROM rp_perfis_horario WHERE id = ?', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Perfil não encontrado' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Criar perfil
+router.post('/perfis-horario', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { nome, hora_entrada, hora_saida_almoco, hora_retorno_almoco, hora_saida, dias_trabalho } = req.body;
+    if (!nome || !hora_entrada || !hora_saida) {
+      return res.status(400).json({ error: 'Nome, hora de entrada e hora de saída são obrigatórios' });
+    }
+
+    const [result] = await pool.execute(
+      `INSERT INTO rp_perfis_horario (nome, hora_entrada, hora_saida_almoco, hora_retorno_almoco, hora_saida, dias_trabalho)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [nome, hora_entrada, hora_saida_almoco || null, hora_retorno_almoco || null, hora_saida, dias_trabalho || '1,2,3,4,5']
+    );
+
+    res.status(201).json({ id: result.insertId, message: 'Perfil criado com sucesso' });
+  } catch (err) {
+    console.error('Erro ao criar perfil:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Editar perfil
+router.put('/perfis-horario/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { nome, hora_entrada, hora_saida_almoco, hora_retorno_almoco, hora_saida, dias_trabalho } = req.body;
+
+    await pool.execute(
+      `UPDATE rp_perfis_horario SET nome = ?, hora_entrada = ?, hora_saida_almoco = ?, hora_retorno_almoco = ?, hora_saida = ?, dias_trabalho = ? WHERE id = ?`,
+      [nome, hora_entrada, hora_saida_almoco || null, hora_retorno_almoco || null, hora_saida, dias_trabalho || '1,2,3,4,5', req.params.id]
+    );
+
+    res.json({ message: 'Perfil atualizado com sucesso' });
+  } catch (err) {
+    console.error('Erro ao editar perfil:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Excluir perfil
+router.delete('/perfis-horario/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    // Desvincular colaboradores que usam este perfil
+    await pool.execute('UPDATE rp_funcionarios SET perfil_horario_id = NULL WHERE perfil_horario_id = ?', [req.params.id]);
+    await pool.execute('DELETE FROM rp_perfis_horario WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Perfil removido com sucesso' });
+  } catch (err) {
+    console.error('Erro ao remover perfil:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// ==================== HORÁRIOS POR FUNCIONÁRIO (legado) ====================
+
 // Definir horário de trabalho de um funcionário
 router.post('/horario', authMiddleware, adminMiddleware, async (req, res) => {
   try {

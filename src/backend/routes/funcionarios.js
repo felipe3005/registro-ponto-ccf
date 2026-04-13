@@ -11,27 +11,31 @@ router.get('/', authMiddleware, async (req, res) => {
     const { page = 1, limit = 20, busca, departamento, ativo = '1' } = req.query;
     const offset = (page - 1) * limit;
 
-    let where = 'WHERE ativo = ?';
+    let where = 'WHERE f.ativo = ?';
     const params = [parseInt(ativo)];
 
     if (busca) {
-      where += ' AND (nome LIKE ? OR usuario LIKE ? OR email LIKE ? OR cargo LIKE ?)';
+      where += ' AND (f.nome LIKE ? OR f.usuario LIKE ? OR f.email LIKE ? OR f.cargo LIKE ?)';
       const termo = `%${busca}%`;
       params.push(termo, termo, termo, termo);
     }
     if (departamento) {
-      where += ' AND departamento = ?';
+      where += ' AND f.departamento = ?';
       params.push(departamento);
     }
 
     const [countRows] = await pool.execute(
-      `SELECT COUNT(*) as total FROM rp_funcionarios ${where}`,
+      `SELECT COUNT(*) as total FROM rp_funcionarios f ${where}`,
       params
     );
 
     const [rows] = await pool.execute(
-      `SELECT id, nome, usuario, email, cargo, departamento, jornada_semanal, role, ativo, created_at
-       FROM rp_funcionarios ${where} ORDER BY nome LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`,
+      `SELECT f.id, f.nome, f.usuario, f.email, f.cargo, f.departamento, f.jornada_semanal, f.perfil_horario_id, f.role, f.ativo, f.created_at,
+              p.nome AS perfil_nome, p.hora_entrada AS perfil_entrada, p.hora_saida AS perfil_saida
+       FROM rp_funcionarios f
+       LEFT JOIN rp_perfis_horario p ON f.perfil_horario_id = p.id
+       ${where}
+       ORDER BY f.nome LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`,
       params
     );
 
@@ -51,7 +55,11 @@ router.get('/', authMiddleware, async (req, res) => {
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      'SELECT id, nome, usuario, email, cargo, departamento, jornada_semanal, role, ativo, created_at FROM rp_funcionarios WHERE id = ?',
+      `SELECT f.id, f.nome, f.usuario, f.email, f.cargo, f.departamento, f.jornada_semanal, f.perfil_horario_id, f.role, f.ativo, f.created_at,
+              p.nome AS perfil_nome
+       FROM rp_funcionarios f
+       LEFT JOIN rp_perfis_horario p ON f.perfil_horario_id = p.id
+       WHERE f.id = ?`,
       [req.params.id]
     );
     if (rows.length === 0) {
@@ -66,7 +74,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 // Cadastrar funcionário
 router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { nome, usuario, email, senha, cargo, departamento, jornada_semanal, role } = req.body;
+    const { nome, usuario, email, senha, cargo, departamento, jornada_semanal, perfil_horario_id, role } = req.body;
     if (!nome || !usuario || !senha) {
       return res.status(400).json({ error: 'Nome, usuário e senha são obrigatórios' });
     }
@@ -80,9 +88,9 @@ router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
 
     const senhaHash = await bcrypt.hash(senha, 10);
     const [result] = await pool.execute(
-      `INSERT INTO rp_funcionarios (nome, usuario, email, senha_hash, senha_temporaria, cargo, departamento, jornada_semanal, role)
-       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)`,
-      [nome, usuarioLower, email || null, senhaHash, cargo || null, departamento || null, jornada_semanal || 44, role || 'funcionario']
+      `INSERT INTO rp_funcionarios (nome, usuario, email, senha_hash, senha_temporaria, cargo, departamento, jornada_semanal, perfil_horario_id, role)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+      [nome, usuarioLower, email || null, senhaHash, cargo || null, departamento || null, jornada_semanal || 44, perfil_horario_id || null, role || 'funcionario']
     );
 
     res.status(201).json({
@@ -99,7 +107,7 @@ router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
 // Editar funcionário
 router.put('/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { nome, usuario, email, cargo, departamento, jornada_semanal, role } = req.body;
+    const { nome, usuario, email, cargo, departamento, jornada_semanal, perfil_horario_id, role } = req.body;
     const fields = [];
     const values = [];
 
@@ -117,6 +125,7 @@ router.put('/:id', authMiddleware, adminMiddleware, async (req, res) => {
     if (cargo !== undefined) { fields.push('cargo = ?'); values.push(cargo); }
     if (departamento !== undefined) { fields.push('departamento = ?'); values.push(departamento); }
     if (jornada_semanal) { fields.push('jornada_semanal = ?'); values.push(jornada_semanal); }
+    if (perfil_horario_id !== undefined) { fields.push('perfil_horario_id = ?'); values.push(perfil_horario_id || null); }
     if (role) { fields.push('role = ?'); values.push(role); }
 
     if (fields.length === 0) {
