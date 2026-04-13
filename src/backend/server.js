@@ -22,6 +22,16 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 app.use(express.static(path.join(__dirname, '../frontend')));
 
+// Versão do app (lida do package.json)
+app.get('/api/version', (req, res) => {
+  try {
+    const pkg = require('../../package.json');
+    res.json({ version: pkg.version, name: pkg.productName || pkg.name });
+  } catch (err) {
+    res.json({ version: '?', name: 'Ponto Digital CCF' });
+  }
+});
+
 // Health check (não precisa de auth, verifica conexão com MySQL)
 app.get('/api/health', async (req, res) => {
   try {

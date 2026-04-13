@@ -8,6 +8,7 @@ let funcPage = 1;
 document.addEventListener('DOMContentLoaded', () => {
   OfflineManager.init();
   setupUpdateListener();
+  loadAppVersion();
 
   const token = localStorage.getItem('token');
   if (token) {
@@ -238,8 +239,11 @@ async function loadDashboard() {
 
 async function loadDashboardFunc(hoje) {
   try {
-    const registros = await api.registrosDia(formatDateISO(hoje));
-    const horas = await api.horasTrabalhadas(formatDateISO(hoje));
+    // Paralelizar chamadas ao invés de sequencial (metade da latência)
+    const [registros, horas] = await Promise.all([
+      api.registrosDia(formatDateISO(hoje)),
+      api.horasTrabalhadas(formatDateISO(hoje))
+    ]);
     const mes = hoje.getMonth() + 1;
     const ano = hoje.getFullYear();
 
@@ -1503,6 +1507,36 @@ document.getElementById('btn-confirmar-rejeitar-abono').addEventListener('click'
 document.getElementById('abonos-filtro-status').addEventListener('change', loadAbonosAdmin);
 document.getElementById('abonos-filtro-tipo').addEventListener('change', loadAbonosAdmin);
 
+// ==================== APP VERSION ====================
+async function loadAppVersion() {
+  try {
+    const res = await fetch(API_BASE + '/version');
+    const data = await res.json();
+    const el = document.getElementById('app-version');
+    if (el) el.textContent = 'v' + data.version;
+  } catch (e) {
+    const el = document.getElementById('app-version');
+    if (el) el.textContent = '';
+  }
+}
+
+function showUpdateProgress(label, pct) {
+  const wrap = document.getElementById('update-progress-wrap');
+  const lbl = document.getElementById('update-progress-label');
+  const fill = document.getElementById('update-progress-fill');
+  const pctEl = document.getElementById('update-progress-pct');
+  if (!wrap) return;
+  wrap.classList.remove('hidden');
+  if (lbl) lbl.textContent = label;
+  if (fill) fill.style.width = (pct || 0) + '%';
+  if (pctEl) pctEl.textContent = Math.round(pct || 0) + '%';
+}
+
+function hideUpdateProgress() {
+  const wrap = document.getElementById('update-progress-wrap');
+  if (wrap) wrap.classList.add('hidden');
+}
+
 // ==================== AUTO UPDATE UI ====================
 function setupUpdateListener() {
   window.addEventListener('update-status', function(e) {
@@ -1521,10 +1555,12 @@ function setupUpdateListener() {
         title.textContent = 'Verificando atualizacoes...';
         message.textContent = '';
         progressBar.classList.add('hidden');
+        showUpdateProgress('Verificando atualizações...', 0);
         // Esconder apos 3s se nao tiver update
         setTimeout(function() {
           if (title.textContent === 'Verificando atualizacoes...') {
             banner.classList.add('hidden');
+            hideUpdateProgress();
           }
         }, 3000);
         break;
@@ -1535,6 +1571,7 @@ function setupUpdateListener() {
         message.textContent = data.message;
         progressBar.classList.remove('hidden');
         progressFill.style.width = '0%';
+        showUpdateProgress('Baixando v' + (data.version || '') + '...', 0);
         break;
 
       case 'downloading':
@@ -1543,6 +1580,7 @@ function setupUpdateListener() {
         message.textContent = data.percent + '% concluido';
         progressBar.classList.remove('hidden');
         progressFill.style.width = data.percent + '%';
+        showUpdateProgress('Baixando atualização... ' + data.percent + '%', data.percent);
         break;
 
       case 'downloaded':
@@ -1550,6 +1588,11 @@ function setupUpdateListener() {
         title.textContent = 'Atualizacao pronta!';
         message.textContent = 'O sistema sera reiniciado em instantes para aplicar a versao ' + (data.version || 'nova') + '.';
         progressBar.classList.add('hidden');
+        showUpdateProgress('Instalando v' + (data.version || '') + '...', 100);
+        break;
+
+      case 'installing':
+        showUpdateProgress('Instalando atualização... ' + (data.percent || 0) + '%', data.percent || 0);
         break;
 
       case 'up-to-date':
@@ -1557,7 +1600,12 @@ function setupUpdateListener() {
         title.textContent = 'Sistema atualizado';
         message.textContent = 'Voce ja esta na versao mais recente.';
         progressBar.classList.add('hidden');
+        hideUpdateProgress();
         setTimeout(function() { banner.classList.add('hidden'); }, 3000);
+        break;
+
+      case 'error':
+        hideUpdateProgress();
         break;
     }
   });

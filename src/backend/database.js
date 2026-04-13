@@ -8,8 +8,10 @@ const pool = mysql.createPool({
   password: process.env.MYSQL_PASSWORD,
   database: process.env.MYSQL_DATABASE,
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 20,           // maior para suportar Promise.all paralelo
   queueLimit: 0,
+  enableKeepAlive: true,         // reduz custo de reconexão ao TiDB remoto
+  keepAliveInitialDelay: 10000,
   ssl: { rejectUnauthorized: true }
 });
 
@@ -58,9 +60,23 @@ async function initDatabase() {
         data_hora DATETIME NOT NULL,
         ip_origem VARCHAR(45),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_func_data (funcionario_id, data_hora)
+        INDEX idx_func_data (funcionario_id, data_hora),
+        INDEX idx_data (data_hora),
+        INDEX idx_tipo_data (tipo, data_hora)
       )
     `);
+
+    // Migrações: garantir índices novos em bases antigas
+    try {
+      const [idx] = await conn.execute(`SHOW INDEX FROM rp_registros_ponto`);
+      const idxNames = idx.map(i => i.Key_name);
+      if (!idxNames.includes('idx_data')) {
+        try { await conn.execute(`CREATE INDEX idx_data ON rp_registros_ponto (data_hora)`); } catch(e) {}
+      }
+      if (!idxNames.includes('idx_tipo_data')) {
+        try { await conn.execute(`CREATE INDEX idx_tipo_data ON rp_registros_ponto (tipo, data_hora)`); } catch(e) {}
+      }
+    } catch(e) {}
 
     // Tabela de ajustes de ponto
     await conn.execute(`
