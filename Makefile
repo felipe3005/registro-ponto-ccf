@@ -1,6 +1,12 @@
 .PHONY: install dev start seed build-win build-mac build clean help \
        release release-win release-mac bump-patch bump-minor bump-major
 
+# Carregar .env
+ifneq (,$(wildcard .env))
+  include .env
+  export
+endif
+
 # Variáveis
 NPM := npm
 NODE := node
@@ -66,6 +72,7 @@ release-win: bump-patch ## Build Windows + git + publish (auto-update colaborado
 	$(NPM) run release:win
 	@echo "\033[32m✔ Release Windows v$$(node -p "require('./package.json').version") publicada com sucesso!\033[0m"
 	@echo "\033[32m  Os colaboradores receberao a atualizacao automaticamente.\033[0m"
+	@echo "\033[33m  URL: https://github.com/felipe3005/registro-ponto-ccf/releases/tag/v$$(node -p "require('./package.json').version")\033[0m"
 
 release-mac: bump-patch ## Build Mac + git + publish (auto-update colaboradores)
 	@echo "\033[36m=> Versao: $$(node -p "require('./package.json').version")\033[0m"
@@ -79,6 +86,7 @@ release-mac: bump-patch ## Build Mac + git + publish (auto-update colaboradores)
 	$(NPM) run release:mac
 	@echo "\033[32m✔ Release Mac v$$(node -p "require('./package.json').version") publicada com sucesso!\033[0m"
 	@echo "\033[32m  Os colaboradores receberao a atualizacao automaticamente.\033[0m"
+	@echo "\033[33m  URL: https://github.com/felipe3005/registro-ponto-ccf/releases/tag/v$$(node -p "require('./package.json').version")\033[0m"
 
 release: bump-patch ## Build Win+Mac + git + publish (auto-update colaboradores)
 	@echo "\033[36m=> Versao: $$(node -p "require('./package.json').version")\033[0m"
@@ -92,3 +100,4 @@ release: bump-patch ## Build Win+Mac + git + publish (auto-update colaboradores)
 	$(NPM) run release
 	@echo "\033[32m✔ Release v$$(node -p "require('./package.json').version") publicada com sucesso!\033[0m"
 	@echo "\033[32m  Os colaboradores receberao a atualizacao automaticamente.\033[0m"
+	@echo "\033[33m  URL: https://github.com/felipe3005/registro-ponto-ccf/releases/tag/v$$(node -p "require('./package.json').version")\033[0m"
