@@ -10,6 +10,9 @@ const ORDEM_TIPOS = ['entrada', 'saida_almoco', 'retorno_almoco', 'saida'];
 // Registrar ponto
 router.post('/registrar', authMiddleware, async (req, res) => {
   try {
+    if (req.user.role === 'admin') {
+      return res.status(403).json({ error: 'Administradores não registram ponto' });
+    }
     const funcionarioId = req.user.id;
     const agora = moment();
     const hoje = agora.format('YYYY-MM-DD');
@@ -120,6 +123,59 @@ router.get('/mes', authMiddleware, async (req, res) => {
 
     res.json(rows);
   } catch (err) {
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Sincronizar registros offline
+router.post('/sync', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role === 'admin') {
+      return res.status(403).json({ error: 'Administradores não registram ponto' });
+    }
+
+    const { registros } = req.body;
+    if (!registros || !Array.isArray(registros) || registros.length === 0) {
+      return res.status(400).json({ error: 'Nenhum registro para sincronizar' });
+    }
+
+    const resultados = [];
+    const funcionarioId = req.user.id;
+
+    for (const reg of registros) {
+      try {
+        const dataHora = moment(reg.data_hora);
+        const dia = dataHora.format('YYYY-MM-DD');
+
+        // Verificar se já existe esse tipo nesse dia
+        const [existente] = await pool.execute(
+          `SELECT id FROM rp_registros_ponto
+           WHERE funcionario_id = ? AND DATE(data_hora) = ? AND tipo = ?`,
+          [funcionarioId, dia, reg.tipo]
+        );
+
+        if (existente.length > 0) {
+          resultados.push({ id: reg.offline_id, status: 'duplicado', tipo: reg.tipo, data: dia });
+          continue;
+        }
+
+        await pool.execute(
+          'INSERT INTO rp_registros_ponto (funcionario_id, tipo, data_hora, ip_origem) VALUES (?, ?, ?, ?)',
+          [funcionarioId, reg.tipo, dataHora.format('YYYY-MM-DD HH:mm:ss'), reg.ip || 'offline']
+        );
+
+        resultados.push({ id: reg.offline_id, status: 'sincronizado', tipo: reg.tipo, data: dia });
+      } catch (errReg) {
+        resultados.push({ id: reg.offline_id, status: 'erro', erro: errReg.message });
+      }
+    }
+
+    res.json({
+      message: `Sincronização concluída: ${resultados.filter(r => r.status === 'sincronizado').length} registros sincronizados`,
+      resultados
+    });
+  } catch (err) {
+    console.error('Erro ao sincronizar ponto:', err);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });

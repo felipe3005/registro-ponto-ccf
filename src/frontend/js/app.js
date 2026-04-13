@@ -6,6 +6,9 @@ let funcPage = 1;
 
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', () => {
+  OfflineManager.init();
+  setupUpdateListener();
+
   const token = localStorage.getItem('token');
   if (token) {
     currentUser = api.getUser();
@@ -16,7 +19,19 @@ document.addEventListener('DOMContentLoaded', () => {
         currentUser = user;
         api.setUser(user);
         showApp();
-      }).catch(() => showLogin());
+      }).catch(() => {
+        // Se offline e tem credenciais cacheadas, usa dados locais
+        if (!OfflineManager.isOnline() && OfflineManager.hasCachedCredentials()) {
+          const cached = JSON.parse(localStorage.getItem('offline_credentials'));
+          if (cached && cached.user) {
+            currentUser = cached.user;
+            api.setUser(cached.user);
+            showApp();
+            return;
+          }
+        }
+        showLogin();
+      });
     }
   } else {
     showLogin();
@@ -24,18 +39,81 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ==================== AUTH ====================
+let pendingPasswordChange = null; // guarda senha temporaria para troca
+
 document.getElementById('form-login').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = document.getElementById('login-email').value;
+  const usuario = document.getElementById('login-usuario').value.trim().toLowerCase();
   const senha = document.getElementById('login-senha').value;
 
+  // Tentar login online primeiro
   try {
-    const data = await api.login(email, senha);
+    const data = await api.login(usuario, senha);
     api.setToken(data.token);
     api.setUser(data.user);
     currentUser = data.user;
+    // Cachear credenciais para uso offline
+    OfflineManager.cacheCredentials(usuario, senha, data.user, data.token);
+
+    // Verificar se senha é temporária
+    if (data.senhaTemporaria) {
+      pendingPasswordChange = senha;
+      document.getElementById('troca-senha-atual').value = senha;
+      openModal('modal-trocar-senha');
+      return;
+    }
+
     showApp();
     toast('Login realizado com sucesso!', 'success');
+    return;
+  } catch (err) {
+    // Se estiver online, o erro é real (credenciais inválidas etc)
+    if (OfflineManager.isOnline()) {
+      toast(err.message, 'error');
+      return;
+    }
+  }
+
+  // Tentar login offline
+  const offlineResult = OfflineManager.offlineLogin(usuario, senha);
+  if (offlineResult) {
+    api.setToken(offlineResult.token);
+    api.setUser(offlineResult.user);
+    currentUser = offlineResult.user;
+    showApp();
+    toast('Login offline realizado. Os dados serao sincronizados quando a conexao voltar.', 'warning');
+  } else {
+    toast('Sem conexao com a internet. Faca login online pelo menos uma vez para habilitar o modo offline.', 'error');
+  }
+});
+
+// Troca de senha obrigatória
+document.getElementById('btn-confirmar-troca-senha').addEventListener('click', async () => {
+  const senhaAtual = document.getElementById('troca-senha-atual').value;
+  const novaSenha = document.getElementById('troca-nova-senha').value;
+  const confirmar = document.getElementById('troca-confirmar-senha').value;
+
+  if (!novaSenha || novaSenha.length < 6) {
+    toast('A nova senha deve ter pelo menos 6 caracteres', 'error');
+    return;
+  }
+  if (novaSenha !== confirmar) {
+    toast('As senhas não conferem', 'error');
+    return;
+  }
+  if (novaSenha === senhaAtual) {
+    toast('A nova senha deve ser diferente da atual', 'error');
+    return;
+  }
+
+  try {
+    await api.alterarSenha(senhaAtual, novaSenha);
+    pendingPasswordChange = null;
+    // Atualizar cache offline com nova senha
+    OfflineManager.cacheCredentials(currentUser.usuario, novaSenha, currentUser, api.token);
+    closeModal('modal-trocar-senha');
+    toast('Senha alterada com sucesso!', 'success');
+    showApp();
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -46,6 +124,7 @@ document.getElementById('btn-logout').addEventListener('click', () => {
   api.setToken(null);
   api.setUser(null);
   currentUser = null;
+  // Não limpar credenciais offline no logout para permitir re-login offline
   showLogin();
 });
 
@@ -61,16 +140,19 @@ function showApp() {
 
   // Configurar sidebar
   document.getElementById('user-name').textContent = currentUser.nome;
-  document.getElementById('user-role').textContent = currentUser.role === 'admin' ? 'Administrador' : 'Funcionário';
+  document.getElementById('user-role').textContent = currentUser.role === 'admin' ? 'Administrador' : 'Colaborador';
   document.getElementById('user-avatar').textContent = currentUser.nome.charAt(0).toUpperCase();
 
-  // Esconder links admin
+  // Esconder links admin / funcionário
   if (currentUser.role !== 'admin') {
     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
     document.getElementById('nav-admin-section').classList.add('hidden');
+    document.querySelectorAll('.func-only').forEach(el => el.classList.remove('hidden'));
   } else {
     document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
     document.getElementById('nav-admin-section').classList.remove('hidden');
+    // Admin não bate ponto - esconder links de ponto e espelho pessoal
+    document.querySelectorAll('.func-only').forEach(el => el.classList.add('hidden'));
   }
 
   // Nav events
@@ -106,18 +188,37 @@ function navigateTo(page) {
     case 'inconsistencias': break;
     case 'configuracoes': loadConfiguracoes(); break;
     case 'meus-ajustes': loadMeusAjustes(); break;
+    case 'holerites': loadHolerites(); break;
   }
 }
+
+// ==================== CHARTS STATE ====================
+let chartPresenca = null;
+let chartDepartamentos = null;
+let chartStatusHoje = null;
 
 // ==================== DASHBOARD ====================
 async function loadDashboard() {
   const hoje = new Date();
   document.getElementById('dashboard-date').textContent = formatDateBR(hoje);
 
+  if (currentUser.role === 'admin') {
+    document.getElementById('dashboard-admin').classList.remove('hidden');
+    document.getElementById('dashboard-func').classList.add('hidden');
+    await loadDashboardAdmin();
+  } else {
+    document.getElementById('dashboard-admin').classList.add('hidden');
+    document.getElementById('dashboard-func').classList.remove('hidden');
+    await loadDashboardFunc(hoje);
+  }
+}
+
+async function loadDashboardFunc(hoje) {
   try {
-    // Stats
     const registros = await api.registrosDia(formatDateISO(hoje));
     const horas = await api.horasTrabalhadas(formatDateISO(hoje));
+    const mes = hoje.getMonth() + 1;
+    const ano = hoje.getFullYear();
 
     let statsHtml = `
       <div class="stat-card">
@@ -130,8 +231,6 @@ async function loadDashboard() {
       </div>
     `;
 
-    const mes = hoje.getMonth() + 1;
-    const ano = hoje.getFullYear();
     try {
       const banco = await api.bancoHoras(mes, ano);
       statsHtml += `
@@ -145,24 +244,200 @@ async function loadDashboard() {
       `;
     } catch (e) {}
 
-    if (currentUser.role === 'admin') {
-      try {
-        const ajustes = await api.ajustesPendentes();
-        statsHtml += `
-          <div class="stat-card">
-            <div class="stat-icon yellow">&#128221;</div>
-            <div class="stat-info"><h4>${ajustes.length}</h4><p>Ajustes Pendentes</p></div>
-          </div>
-        `;
-      } catch (e) {}
-    }
-
-    document.getElementById('dashboard-stats').innerHTML = statsHtml;
-
-    // Registros de hoje
+    document.getElementById('dashboard-stats-func').innerHTML = statsHtml;
     document.getElementById('dashboard-registros-hoje').innerHTML = renderRegistrosDia(registros);
   } catch (err) {
     console.error('Erro ao carregar dashboard:', err);
+  }
+}
+
+async function loadDashboardAdmin() {
+  try {
+    const data = await api.dashboardAdmin();
+
+    // ---- Stats cards ----
+    document.getElementById('dashboard-stats-admin').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-icon blue">&#128101;</div>
+        <div class="stat-info"><h4>${data.totalFuncionarios}</h4><p>Colaboradores Ativos</p></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">&#9989;</div>
+        <div class="stat-info"><h4>${data.presentesHoje}</h4><p>Presentes Hoje</p></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon red">&#10060;</div>
+        <div class="stat-info"><h4>${data.ausentesHoje}</h4><p>Ausentes Hoje</p></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon yellow">&#128221;</div>
+        <div class="stat-info"><h4>${data.ajustesPendentes}</h4><p>Ajustes Pendentes</p></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon red">&#128683;</div>
+        <div class="stat-info"><h4>${data.atrasados.length}</h4><p>Atrasados Hoje</p></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon yellow">&#9888;</div>
+        <div class="stat-info"><h4>${data.inconsistenciasMes}</h4><p>Inconsist&ecirc;ncias no M&ecirc;s</p></div>
+      </div>
+    `;
+
+    // ---- Gráfico: Presença diária ----
+    if (chartPresenca) chartPresenca.destroy();
+    const ctxPresenca = document.getElementById('chart-presenca').getContext('2d');
+    chartPresenca = new Chart(ctxPresenca, {
+      type: 'line',
+      data: {
+        labels: data.presencaDiaria.map(d => d.dia),
+        datasets: [{
+          label: 'Colaboradors presentes',
+          data: data.presencaDiaria.map(d => d.presentes),
+          borderColor: '#0D2C64',
+          backgroundColor: 'rgba(13, 44, 100, 0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointBackgroundColor: '#0D2C64'
+        }, {
+          label: 'Total colaboradores',
+          data: data.presencaDiaria.map(() => data.totalFuncionarios),
+          borderColor: '#d1d5db',
+          borderDash: [5, 5],
+          pointRadius: 0,
+          fill: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1 } }
+        }
+      }
+    });
+
+    // ---- Gráfico: Horas por departamento ----
+    if (chartDepartamentos) chartDepartamentos.destroy();
+    const ctxDepto = document.getElementById('chart-departamentos').getContext('2d');
+    const deptoColors = ['#0D2C64', '#01AEEF', '#3b8af2', '#062b5b', '#0d58ba', '#6ba7f5', '#b3d1fa', '#444444'];
+    chartDepartamentos = new Chart(ctxDepto, {
+      type: 'bar',
+      data: {
+        labels: data.horasPorDepartamento.map(d => d.departamento),
+        datasets: [{
+          label: 'Horas no mês',
+          data: data.horasPorDepartamento.map(d => Math.round(d.totalMinutos / 60)),
+          backgroundColor: data.horasPorDepartamento.map((_, i) => deptoColors[i % deptoColors.length] + 'cc'),
+          borderColor: data.horasPorDepartamento.map((_, i) => deptoColors[i % deptoColors.length]),
+          borderWidth: 1,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const d = data.horasPorDepartamento[ctx.dataIndex];
+                return `${ctx.parsed.y}h (${d.totalFuncionarios} func.)`;
+              }
+            }
+          }
+        },
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'Horas' } }
+        }
+      }
+    });
+
+    // ---- Gráfico: Status de hoje (donut) ----
+    if (chartStatusHoje) chartStatusHoje.destroy();
+    const ctxStatus = document.getElementById('chart-status-hoje').getContext('2d');
+    chartStatusHoje = new Chart(ctxStatus, {
+      type: 'doughnut',
+      data: {
+        labels: ['Presentes', 'Ausentes', 'Atrasados'],
+        datasets: [{
+          data: [
+            Math.max(0, data.presentesHoje - data.atrasados.length),
+            data.ausentesHoje,
+            data.atrasados.length
+          ],
+          backgroundColor: ['#01AEEF', '#e2eefd', '#ed3c0d'],
+          borderWidth: 0,
+          hoverOffset: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '65%',
+        plugins: {
+          legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } }
+        }
+      }
+    });
+
+    // ---- Atrasados ----
+    if (data.atrasados.length === 0) {
+      document.getElementById('admin-atrasados').innerHTML =
+        '<div class="empty-state"><div class="empty-icon">&#128077;</div><p>Nenhum atraso hoje</p></div>';
+    } else {
+      document.getElementById('admin-atrasados').innerHTML = data.atrasados.map(a => `
+        <div class="atrasado-item">
+          <div>
+            <div class="atrasado-nome">${a.nome}</div>
+            <div class="atrasado-detalhe">Esperado: ${a.horaEsperada} &mdash; Chegou: ${a.horaEntrada}</div>
+          </div>
+          <div class="atrasado-tempo">+${a.atrasoMinutos} min</div>
+        </div>
+      `).join('');
+    }
+
+    // ---- Quadro de presença ----
+    document.getElementById('admin-presenca-count').textContent =
+      `${data.presentesHoje} de ${data.totalFuncionarios} presentes`;
+
+    if (data.registrosHoje.length === 0) {
+      document.getElementById('admin-presenca-body').innerHTML =
+        '<tr><td colspan="8" class="text-center text-muted">Nenhum registro hoje</td></tr>';
+    } else {
+      document.getElementById('admin-presenca-body').innerHTML = data.registrosHoje.map(f => {
+        const r = f.registros;
+        let statusHtml = '';
+        if (r.saida) {
+          statusHtml = '<span class="status-dot gray"></span>Encerrado';
+        } else if (r.retorno_almoco) {
+          statusHtml = '<span class="status-dot green"></span>Trabalhando';
+        } else if (r.saida_almoco) {
+          statusHtml = '<span class="status-dot yellow"></span>Almo&ccedil;o';
+        } else if (r.entrada) {
+          statusHtml = '<span class="status-dot green"></span>Trabalhando';
+        }
+
+        return `<tr>
+          <td><strong>${f.nome}</strong></td>
+          <td>${f.cargo || '-'}</td>
+          <td>${f.departamento || '-'}</td>
+          <td>${r.entrada || '-'}</td>
+          <td>${r.saida_almoco || '-'}</td>
+          <td>${r.retorno_almoco || '-'}</td>
+          <td>${r.saida || '-'}</td>
+          <td>${statusHtml}</td>
+        </tr>`;
+      }).join('');
+    }
+
+  } catch (err) {
+    console.error('Erro ao carregar dashboard admin:', err);
+    toast('Erro ao carregar dashboard', 'error');
   }
 }
 
@@ -182,45 +457,163 @@ function updateClock() {
 }
 
 async function loadRegistrosPonto() {
-  try {
-    const data = await api.ultimoRegistro();
-    const btn = document.getElementById('btn-registrar-ponto');
-    const info = document.getElementById('ponto-tipo-info');
+  const ORDEM_TIPOS = ['entrada', 'saida_almoco', 'retorno_almoco', 'saida'];
+  const labels = {
+    'entrada': 'Registrar Entrada',
+    'saida_almoco': 'Registrar Saída Almoço',
+    'retorno_almoco': 'Registrar Retorno Almoço',
+    'saida': 'Registrar Saída'
+  };
+  const btn = document.getElementById('btn-registrar-ponto');
+  const info = document.getElementById('ponto-tipo-info');
+  const hoje = formatDateISO(new Date());
 
-    btn.className = 'btn-ponto';
-    if (!data.proximoTipo) {
-      btn.textContent = 'Todos os registros feitos';
-      btn.disabled = true;
-      info.textContent = 'Você já registrou todos os pontos de hoje.';
-    } else {
-      const labels = {
-        'entrada': 'Registrar Entrada',
-        'saida_almoco': 'Registrar Saída Almoço',
-        'retorno_almoco': 'Registrar Retorno Almoço',
-        'saida': 'Registrar Saída'
-      };
-      btn.textContent = labels[data.proximoTipo];
-      btn.disabled = false;
-      btn.classList.add(data.proximoTipo);
-      info.textContent = `Próximo registro: ${data.proximoTipo.replace(/_/g, ' ')}`;
+  // Registros offline pendentes do dia
+  const offlineHoje = OfflineManager.getQueueForDate(hoje);
+
+  if (OfflineManager.isOnline()) {
+    try {
+      const data = await api.ultimoRegistro();
+
+      // Merge: tipos do servidor + tipos da fila offline
+      const tiposRegistrados = [];
+      if (data.ultimoRegistro) {
+        // Pegar todos registros do servidor
+        const registrosServidor = await api.registrosDia(hoje);
+        registrosServidor.forEach(r => tiposRegistrados.push(r.tipo));
+      }
+      offlineHoje.forEach(r => {
+        if (!tiposRegistrados.includes(r.tipo)) tiposRegistrados.push(r.tipo);
+      });
+
+      let proximoTipo = null;
+      if (tiposRegistrados.length === 0) {
+        proximoTipo = 'entrada';
+      } else {
+        const ultimoTipo = tiposRegistrados[tiposRegistrados.length - 1];
+        const idx = ORDEM_TIPOS.indexOf(ultimoTipo);
+        proximoTipo = idx < ORDEM_TIPOS.length - 1 ? ORDEM_TIPOS[idx + 1] : null;
+      }
+
+      btn.className = 'btn-ponto';
+      if (!proximoTipo) {
+        btn.textContent = 'Todos os registros feitos';
+        btn.disabled = true;
+        info.textContent = 'Você já registrou todos os pontos de hoje.';
+      } else {
+        btn.textContent = labels[proximoTipo];
+        btn.disabled = false;
+        btn.classList.add(proximoTipo);
+        info.textContent = `Próximo registro: ${proximoTipo.replace(/_/g, ' ')}`;
+      }
+
+      // Registros do dia (servidor + offline)
+      const registros = await api.registrosDia(hoje);
+      // Adicionar registros offline que ainda não estão no servidor
+      offlineHoje.forEach(offReg => {
+        const exists = registros.some(r => r.tipo === offReg.tipo);
+        if (!exists) {
+          registros.push({ tipo: offReg.tipo, data_hora: offReg.data_hora, _offline: true });
+        }
+      });
+      document.getElementById('ponto-registros-hoje').innerHTML = renderRegistrosDia(registros);
+
+      // Mostrar alerta de registros pendentes
+      const pendingCount = OfflineManager.getPendingCount();
+      if (pendingCount > 0) {
+        info.textContent += ` | ${pendingCount} registro(s) pendente(s) de sincronização`;
+      }
+      return;
+    } catch (err) {
+      console.error('Erro ao carregar ponto:', err);
     }
+  }
 
-    // Registros do dia
-    const registros = await api.registrosDia(formatDateISO(new Date()));
-    document.getElementById('ponto-registros-hoje').innerHTML = renderRegistrosDia(registros);
-  } catch (err) {
-    console.error('Erro ao carregar ponto:', err);
+  // Modo offline: mostrar só os registros da fila local
+  const tiposRegistrados = offlineHoje.map(r => r.tipo);
+  let proximoTipo = null;
+  if (tiposRegistrados.length === 0) {
+    proximoTipo = 'entrada';
+  } else {
+    const ultimoTipo = tiposRegistrados[tiposRegistrados.length - 1];
+    const idx = ORDEM_TIPOS.indexOf(ultimoTipo);
+    proximoTipo = idx < ORDEM_TIPOS.length - 1 ? ORDEM_TIPOS[idx + 1] : null;
+  }
+
+  btn.className = 'btn-ponto';
+  if (!proximoTipo) {
+    btn.textContent = 'Todos os registros feitos';
+    btn.disabled = true;
+    info.textContent = 'Todos os pontos de hoje registrados (offline).';
+  } else {
+    btn.textContent = labels[proximoTipo];
+    btn.disabled = false;
+    btn.classList.add(proximoTipo);
+    info.textContent = `Próximo registro: ${proximoTipo.replace(/_/g, ' ')} (offline)`;
+  }
+
+  // Renderizar registros offline
+  const registros = offlineHoje.map(r => ({ tipo: r.tipo, data_hora: r.data_hora, _offline: true }));
+  document.getElementById('ponto-registros-hoje').innerHTML = renderRegistrosDia(registros);
+
+  const pendingCount = OfflineManager.getPendingCount();
+  if (pendingCount > 0) {
+    info.textContent += ` | ${pendingCount} registro(s) aguardando sincronização`;
   }
 }
 
 document.getElementById('btn-registrar-ponto').addEventListener('click', async () => {
-  try {
-    const result = await api.registrarPonto();
-    toast(result.message, 'success');
-    loadRegistrosPonto();
-  } catch (err) {
-    toast(err.message, 'error');
+  // Se online, tentar normalmente
+  if (OfflineManager.isOnline()) {
+    try {
+      const result = await api.registrarPonto();
+      toast(result.message, 'success');
+      loadRegistrosPonto();
+      return;
+    } catch (err) {
+      // Se falhou por problemas de rede, cai no modo offline
+      if (!OfflineManager.isOnline()) {
+        // continua abaixo para salvar offline
+      } else {
+        toast(err.message, 'error');
+        return;
+      }
+    }
   }
+
+  // Modo offline: salvar localmente
+  const ORDEM_TIPOS = ['entrada', 'saida_almoco', 'retorno_almoco', 'saida'];
+  const hoje = formatDateISO(new Date());
+  const agora = new Date();
+
+  // Determinar próximo tipo baseado na fila offline + dados cacheados
+  let registrosHojeTipos = [];
+  const offlineHoje = OfflineManager.getQueueForDate(hoje);
+  registrosHojeTipos = offlineHoje.map(r => r.tipo);
+
+  let proximoTipo;
+  if (registrosHojeTipos.length === 0) {
+    proximoTipo = 'entrada';
+  } else {
+    const ultimoTipo = registrosHojeTipos[registrosHojeTipos.length - 1];
+    const idx = ORDEM_TIPOS.indexOf(ultimoTipo);
+    if (idx === ORDEM_TIPOS.length - 1) {
+      toast('Todos os registros do dia ja foram feitos', 'error');
+      return;
+    }
+    proximoTipo = ORDEM_TIPOS[idx + 1];
+  }
+
+  OfflineManager.addToQueue({
+    tipo: proximoTipo,
+    data_hora: agora.toISOString(),
+    funcionario_id: currentUser.id,
+    ip: 'offline'
+  });
+
+  const labels = { 'entrada': 'Entrada', 'saida_almoco': 'Saida Almoco', 'retorno_almoco': 'Retorno Almoco', 'saida': 'Saida' };
+  toast(`${labels[proximoTipo]} registrada offline! Sera sincronizada quando a conexao voltar.`, 'warning');
+  loadRegistrosPonto();
 });
 
 function renderRegistrosDia(registros) {
@@ -238,9 +631,10 @@ function renderRegistrosDia(registros) {
     ${Object.entries(tipos).map(([tipo, info]) => {
       const reg = regs[tipo];
       const hora = reg ? new Date(reg.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+      const offlineTag = reg && reg._offline ? ' <span class="badge badge-warning" style="font-size:10px;">offline</span>' : '';
       return `<div class="registro-item">
         <div class="label">${info.icon} ${info.label}</div>
-        <div class="hora ${reg ? '' : 'pending'}">${hora}</div>
+        <div class="hora ${reg ? '' : 'pending'}">${hora}${offlineTag}</div>
       </div>`;
     }).join('')}
   </div>`;
@@ -336,7 +730,7 @@ async function loadFuncionarios() {
     document.getElementById('funcionarios-body').innerHTML = data.funcionarios.map(f => `
       <tr>
         <td><strong>${f.nome}</strong></td>
-        <td>${f.email}</td>
+        <td><code>${f.usuario || '-'}</code></td>
         <td>${f.cargo || '-'}</td>
         <td>${f.departamento || '-'}</td>
         <td>${f.jornada_semanal}h</td>
@@ -344,6 +738,7 @@ async function loadFuncionarios() {
         <td>
           <div class="btn-group">
             <button class="btn btn-sm btn-secondary" onclick="editarFuncionario(${f.id})">Editar</button>
+            <button class="btn btn-sm btn-warning" onclick="resetarSenhaFuncionario(${f.id}, '${f.nome.replace(/'/g, "\\'")}', '${(f.usuario || '').replace(/'/g, "\\'")}')">Resetar Senha</button>
             ${f.ativo ?
               `<button class="btn btn-sm btn-danger" onclick="desativarFuncionario(${f.id})">Desativar</button>` :
               `<button class="btn btn-sm btn-success" onclick="reativarFuncionario(${f.id})">Reativar</button>`
@@ -373,15 +768,17 @@ document.getElementById('filtro-busca').addEventListener('input', debounce(() =>
 document.getElementById('filtro-ativo').addEventListener('change', () => { funcPage = 1; loadFuncionarios(); });
 
 document.getElementById('btn-novo-funcionario').addEventListener('click', () => {
-  document.getElementById('modal-func-title').textContent = 'Novo Funcionário';
+  document.getElementById('modal-func-title').textContent = 'Novo Colaborador';
   document.getElementById('func-id').value = '';
   document.getElementById('func-nome').value = '';
+  document.getElementById('func-usuario').value = '';
   document.getElementById('func-email').value = '';
   document.getElementById('func-senha').value = '';
   document.getElementById('func-cargo').value = '';
   document.getElementById('func-departamento').value = '';
   document.getElementById('func-jornada').value = '44';
   document.getElementById('func-role').value = 'funcionario';
+  document.getElementById('func-usuario').readOnly = false;
   document.getElementById('func-senha-group').classList.remove('hidden');
   openModal('modal-funcionario');
 });
@@ -389,10 +786,12 @@ document.getElementById('btn-novo-funcionario').addEventListener('click', () => 
 async function editarFuncionario(id) {
   try {
     const func = await api.buscarFuncionario(id);
-    document.getElementById('modal-func-title').textContent = 'Editar Funcionário';
+    document.getElementById('modal-func-title').textContent = 'Editar Colaborador';
     document.getElementById('func-id').value = func.id;
     document.getElementById('func-nome').value = func.nome;
-    document.getElementById('func-email').value = func.email;
+    document.getElementById('func-usuario').value = func.usuario || '';
+    document.getElementById('func-usuario').readOnly = true;
+    document.getElementById('func-email').value = func.email || '';
     document.getElementById('func-senha').value = '';
     document.getElementById('func-cargo').value = func.cargo || '';
     document.getElementById('func-departamento').value = func.departamento || '';
@@ -409,6 +808,7 @@ document.getElementById('btn-salvar-funcionario').addEventListener('click', asyn
   const id = document.getElementById('func-id').value;
   const dados = {
     nome: document.getElementById('func-nome').value,
+    usuario: document.getElementById('func-usuario').value,
     email: document.getElementById('func-email').value,
     cargo: document.getElementById('func-cargo').value,
     departamento: document.getElementById('func-departamento').value,
@@ -418,16 +818,17 @@ document.getElementById('btn-salvar-funcionario').addEventListener('click', asyn
 
   if (!id) {
     dados.senha = document.getElementById('func-senha').value;
-    if (!dados.senha) { toast('Senha é obrigatória', 'error'); return; }
+    if (!dados.usuario) { toast('Usuário é obrigatório', 'error'); return; }
+    if (!dados.senha) { toast('Senha inicial é obrigatória', 'error'); return; }
   }
 
   try {
     if (id) {
       await api.editarFuncionario(id, dados);
-      toast('Funcionário atualizado!', 'success');
+      toast('Colaborador atualizado!', 'success');
     } else {
-      await api.cadastrarFuncionario(dados);
-      toast('Funcionário cadastrado!', 'success');
+      const result = await api.cadastrarFuncionario(dados);
+      toast(`Colaborador cadastrado! Usuário: ${result.usuario}`, 'success');
     }
     closeModal('modal-funcionario');
     loadFuncionarios();
@@ -437,10 +838,10 @@ document.getElementById('btn-salvar-funcionario').addEventListener('click', asyn
 });
 
 async function desativarFuncionario(id) {
-  if (!confirm('Deseja desativar este funcionário?')) return;
+  if (!confirm('Deseja desativar este colaborador?')) return;
   try {
     await api.desativarFuncionario(id);
-    toast('Funcionário desativado', 'success');
+    toast('Colaborador desativado', 'success');
     loadFuncionarios();
   } catch (err) { toast(err.message, 'error'); }
 }
@@ -448,10 +849,39 @@ async function desativarFuncionario(id) {
 async function reativarFuncionario(id) {
   try {
     await api.reativarFuncionario(id);
-    toast('Funcionário reativado', 'success');
+    toast('Colaborador reativado', 'success');
     loadFuncionarios();
   } catch (err) { toast(err.message, 'error'); }
 }
+
+// Resetar senha de funcionário
+let resetFuncId = null;
+function resetarSenhaFuncionario(id, nome, usuario) {
+  resetFuncId = id;
+  document.getElementById('reset-func-nome').textContent = nome;
+  document.getElementById('reset-func-usuario').textContent = usuario;
+  document.getElementById('reset-nova-senha').value = '';
+  openModal('modal-resetar-senha');
+}
+
+document.getElementById('btn-confirmar-reset-senha').addEventListener('click', async () => {
+  if (!resetFuncId) return;
+  const novaSenha = document.getElementById('reset-nova-senha').value.trim();
+
+  try {
+    const result = await api.resetarSenha(resetFuncId, novaSenha || null);
+    closeModal('modal-resetar-senha');
+
+    // Mostrar modal com resultado
+    document.getElementById('gerada-usuario').textContent = result.usuario;
+    document.getElementById('gerada-senha').textContent = result.novaSenha;
+    openModal('modal-senha-gerada');
+
+    resetFuncId = null;
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+});
 
 function verEspelho(funcionarioId) {
   navigateTo('meu-espelho');
@@ -609,7 +1039,7 @@ async function loadConfiguracoes() {
       </tr>
     `).join('') || '<tr><td colspan="3" class="text-center text-muted">Nenhum feriado cadastrado</td></tr>';
 
-    // Funcionários para horário
+    // Colaboradors para horário
     const funcs = await api.listarFuncionarios({ limit: 100 });
     document.getElementById('config-funcionario').innerHTML =
       '<option value="">Selecione...</option>' +
@@ -686,7 +1116,7 @@ document.getElementById('config-funcionario').addEventListener('change', async (
 
 document.getElementById('btn-salvar-horarios').addEventListener('click', async () => {
   const funcId = document.getElementById('config-funcionario').value;
-  if (!funcId) { toast('Selecione um funcionário', 'error'); return; }
+  if (!funcId) { toast('Selecione um colaborador', 'error'); return; }
 
   const inputs = document.querySelectorAll('.horario-input');
   const horariosMap = {};
@@ -710,6 +1140,139 @@ document.getElementById('btn-salvar-horarios').addEventListener('click', async (
     toast('Horários salvos!', 'success');
   } catch (err) { toast(err.message, 'error'); }
 });
+
+// ==================== HOLERITES (ESPELHO DO COLABORADOR) ====================
+function loadHolerites() {
+  // Apenas popula selectors, espera o usuario clicar em Gerar
+}
+
+document.getElementById('btn-gerar-holerite').addEventListener('click', async () => {
+  const mes = document.getElementById('holerite-mes').value;
+  const ano = document.getElementById('holerite-ano').value;
+
+  try {
+    const data = await api.espelhoPonto(mes, ano);
+    const func = data.funcionario;
+    const meses = ['Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+    const diasSemana = { 'Sun': 'Dom', 'Mon': 'Seg', 'Tue': 'Ter', 'Wed': 'Qua', 'Thu': 'Qui', 'Fri': 'Sex', 'Sat': 'Sab' };
+
+    let html = '<div class="espelho-header">';
+    html += '<div style="text-align:center;margin-bottom:16px;">';
+    html += '<h2 style="color:var(--ccf-blue);margin:0;">Espelho de Ponto</h2>';
+    html += '<p class="text-muted">' + meses[parseInt(mes) - 1] + ' de ' + ano + '</p>';
+    html += '</div>';
+    html += '<div class="info-grid">';
+    html += '<div class="info-item"><strong>Colaborador:</strong> ' + func.nome + '</div>';
+    html += '<div class="info-item"><strong>Cargo:</strong> ' + (func.cargo || '-') + '</div>';
+    html += '<div class="info-item"><strong>Departamento:</strong> ' + (func.departamento || '-') + '</div>';
+    html += '<div class="info-item"><strong>Jornada:</strong> ' + func.jornada_semanal + 'h semanais</div>';
+    html += '</div></div>';
+
+    html += '<div class="table-container"><table><thead><tr>';
+    html += '<th>Data</th><th>Dia</th><th>Entrada</th><th>Saida Almoco</th><th>Retorno</th><th>Saida</th><th>Total</th><th>Status</th>';
+    html += '</tr></thead><tbody>';
+
+    data.dias.forEach(function(d) {
+      const dia = new Date(d.data + 'T12:00:00');
+      const diaSemana = diasSemana[dia.toLocaleDateString('en', { weekday: 'short' })] || d.diaSemana;
+      const dataFormatada = d.data.split('-').reverse().join('/');
+      const statusBadge = getStatusBadge(d.status);
+      const muted = (d.status === 'fim_de_semana' || d.status === 'feriado') ? ' class="text-muted"' : '';
+
+      html += '<tr' + muted + '>';
+      html += '<td>' + dataFormatada + '</td>';
+      html += '<td>' + diaSemana + '</td>';
+      html += '<td>' + (d.entrada || '-') + '</td>';
+      html += '<td>' + (d.saida_almoco || '-') + '</td>';
+      html += '<td>' + (d.retorno_almoco || '-') + '</td>';
+      html += '<td>' + (d.saida || '-') + '</td>';
+      html += '<td><strong>' + d.trabalhado + '</strong></td>';
+      html += '<td>' + statusBadge + (d.feriado ? ' <small>(' + d.feriado + ')</small>' : '') + '</td>';
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+
+    // Resumo
+    html += '<div class="stats-grid mt-3">';
+    html += '<div class="stat-card"><div class="stat-icon blue">&#9201;</div><div class="stat-info"><h4>' + data.resumo.totalTrabalhado + '</h4><p>Total Trabalhado</p></div></div>';
+    html += '<div class="stat-card"><div class="stat-icon green">&#128200;</div><div class="stat-info"><h4>' + data.resumo.totalExtras + '</h4><p>Horas Extras</p></div></div>';
+    html += '<div class="stat-card"><div class="stat-icon red">&#10060;</div><div class="stat-info"><h4>' + data.resumo.totalFaltas + '</h4><p>Faltas</p></div></div>';
+    html += '<div class="stat-card"><div class="stat-icon yellow">&#128197;</div><div class="stat-info"><h4>' + data.resumo.jornadaMensal + '</h4><p>Jornada Mensal</p></div></div>';
+    html += '</div>';
+
+    document.getElementById('holerite-preview').innerHTML = html;
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+});
+
+document.getElementById('btn-holerite-pdf').addEventListener('click', () => {
+  const mes = document.getElementById('holerite-mes').value;
+  const ano = document.getElementById('holerite-ano').value;
+  window.open(API_BASE + '/relatorios/exportar/pdf?mes=' + mes + '&ano=' + ano + '&funcionario_id=' + currentUser.id, '_blank');
+});
+
+// ==================== AUTO UPDATE UI ====================
+function setupUpdateListener() {
+  window.addEventListener('update-status', function(e) {
+    var data = e.detail;
+    var banner = document.getElementById('update-banner');
+    var title = document.getElementById('update-title');
+    var message = document.getElementById('update-message');
+    var progressBar = document.getElementById('update-progress-bar');
+    var progressFill = document.getElementById('update-progress-fill');
+
+    if (!banner) return;
+
+    switch (data.status) {
+      case 'checking':
+        banner.classList.remove('hidden');
+        title.textContent = 'Verificando atualizacoes...';
+        message.textContent = '';
+        progressBar.classList.add('hidden');
+        // Esconder apos 3s se nao tiver update
+        setTimeout(function() {
+          if (title.textContent === 'Verificando atualizacoes...') {
+            banner.classList.add('hidden');
+          }
+        }, 3000);
+        break;
+
+      case 'available':
+        banner.classList.remove('hidden');
+        title.textContent = 'Nova versao disponivel!';
+        message.textContent = data.message;
+        progressBar.classList.remove('hidden');
+        progressFill.style.width = '0%';
+        break;
+
+      case 'downloading':
+        banner.classList.remove('hidden');
+        title.textContent = 'Baixando atualizacao...';
+        message.textContent = data.percent + '% concluido';
+        progressBar.classList.remove('hidden');
+        progressFill.style.width = data.percent + '%';
+        break;
+
+      case 'downloaded':
+        banner.classList.remove('hidden');
+        title.textContent = 'Atualizacao pronta!';
+        message.textContent = 'O sistema sera reiniciado em instantes para aplicar a versao ' + (data.version || 'nova') + '.';
+        progressBar.classList.add('hidden');
+        break;
+
+      case 'up-to-date':
+        banner.classList.remove('hidden');
+        title.textContent = 'Sistema atualizado';
+        message.textContent = 'Voce ja esta na versao mais recente.';
+        progressBar.classList.add('hidden');
+        setTimeout(function() { banner.classList.add('hidden'); }, 3000);
+        break;
+    }
+  });
+}
 
 // ==================== HELPERS ====================
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -747,8 +1310,8 @@ function populateMonthSelectors() {
   const now = new Date();
   const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-  const mesSelectors = ['espelho-mes', 'rel-mes', 'incon-mes'];
-  const anoSelectors = ['espelho-ano', 'rel-ano', 'incon-ano'];
+  const mesSelectors = ['espelho-mes', 'rel-mes', 'incon-mes', 'holerite-mes'];
+  const anoSelectors = ['espelho-ano', 'rel-ano', 'incon-ano', 'holerite-ano'];
 
   mesSelectors.forEach(id => {
     const sel = document.getElementById(id);

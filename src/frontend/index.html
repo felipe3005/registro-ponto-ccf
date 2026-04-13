@@ -4,25 +4,54 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Registro de Ponto - CCF</title>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="images/icon.png">
   <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div id="toast-container" class="toast-container"></div>
 
+  <!-- BANNER UPDATE -->
+  <div id="update-banner" class="update-banner hidden">
+    <div class="update-banner-content">
+      <span class="update-icon">&#128260;</span>
+      <div class="update-text">
+        <strong id="update-title">Atualizando...</strong>
+        <span id="update-message"></span>
+      </div>
+      <div id="update-progress-bar" class="update-progress hidden">
+        <div class="update-progress-fill" id="update-progress-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BANNER OFFLINE -->
+  <div id="offline-banner" class="offline-banner hidden">
+    <div class="offline-banner-content">
+      <span class="offline-icon">&#9888;</span>
+      <div class="offline-text">
+        <strong>Sem conex&atilde;o com a internet</strong>
+        <span>Voc&ecirc; pode bater ponto normalmente. Os dados ser&atilde;o sincronizados automaticamente quando a conex&atilde;o voltar.</span>
+      </div>
+      <span id="offline-pending-count" class="offline-pending"></span>
+    </div>
+  </div>
+
   <!-- LOGIN -->
   <div id="page-login" class="login-container">
     <div class="login-box">
-      <div class="logo">&#128336;</div>
+      <div class="logo"><img src="images/logo-420x110.png" alt="CCF" class="login-logo"></div>
       <h1>Ponto Digital</h1>
-      <p class="subtitle">CCF - Sistema de Registro de Ponto</p>
+      <p class="subtitle">Sistema de Registro de Ponto</p>
       <form id="form-login">
         <div class="form-group">
-          <label>Email</label>
-          <input type="email" id="login-email" class="form-control" placeholder="seu@email.com" required>
+          <label>Usu&aacute;rio</label>
+          <input type="text" id="login-usuario" class="form-control" placeholder="seu.usuario" required autocomplete="username">
         </div>
         <div class="form-group">
           <label>Senha</label>
-          <input type="password" id="login-senha" class="form-control" placeholder="Sua senha" required>
+          <input type="password" id="login-senha" class="form-control" placeholder="Sua senha" required autocomplete="current-password">
         </div>
         <button type="submit" class="btn btn-primary" style="width:100%;padding:12px;margin-top:8px;font-size:16px;">Entrar</button>
       </form>
@@ -34,24 +63,27 @@
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <h2>&#128336; Ponto CCF</h2>
-        <p>Sistema de Registro de Ponto</p>
+        <img src="images/logo-420x110.png" alt="CCF" class="sidebar-logo">
+        <p>Ponto Digital</p>
       </div>
       <nav class="sidebar-nav">
         <div class="nav-section">Principal</div>
         <a href="#" data-page="dashboard" class="active"><span class="icon">&#128200;</span> Dashboard</a>
-        <a href="#" data-page="ponto"><span class="icon">&#9201;</span> Registrar Ponto</a>
-        <a href="#" data-page="meu-espelho"><span class="icon">&#128196;</span> Meu Espelho</a>
+        <a href="#" data-page="ponto" class="func-only"><span class="icon">&#9201;</span> Registrar Ponto</a>
+        <a href="#" data-page="meu-espelho" class="func-only"><span class="icon">&#128196;</span> Meu Espelho</a>
 
         <div class="nav-section" id="nav-admin-section">Administra&ccedil;&atilde;o</div>
-        <a href="#" data-page="funcionarios" class="admin-only"><span class="icon">&#128101;</span> Funcion&aacute;rios</a>
+        <a href="#" data-page="funcionarios" class="admin-only"><span class="icon">&#128101;</span> Colaboradores</a>
         <a href="#" data-page="ajustes-admin" class="admin-only"><span class="icon">&#9989;</span> Ajustes Pendentes</a>
         <a href="#" data-page="relatorios" class="admin-only"><span class="icon">&#128202;</span> Relat&oacute;rios</a>
         <a href="#" data-page="inconsistencias" class="admin-only"><span class="icon">&#9888;</span> Inconsist&ecirc;ncias</a>
         <a href="#" data-page="configuracoes" class="admin-only"><span class="icon">&#9881;</span> Configura&ccedil;&otilde;es</a>
 
-        <div class="nav-section">Solicita&ccedil;&otilde;es</div>
-        <a href="#" data-page="meus-ajustes"><span class="icon">&#128221;</span> Meus Ajustes</a>
+        <div class="nav-section func-only">Documentos</div>
+        <a href="#" data-page="holerites" class="func-only"><span class="icon">&#128179;</span> Meus Holerites</a>
+
+        <div class="nav-section func-only">Solicita&ccedil;&otilde;es</div>
+        <a href="#" data-page="meus-ajustes" class="func-only"><span class="icon">&#128221;</span> Meus Ajustes</a>
       </nav>
       <div class="sidebar-footer">
         <div class="user-info">
@@ -67,18 +99,61 @@
 
     <!-- Main Content -->
     <main class="main-content">
-      <!-- DASHBOARD -->
+      <!-- DASHBOARD FUNCIONARIO -->
       <div id="page-dashboard" class="page">
         <div class="page-header"><h1>Dashboard</h1><span id="dashboard-date"></span></div>
         <div class="page-body">
-          <div class="stats-grid" id="dashboard-stats"></div>
-          <div class="card">
-            <div class="card-header"><h3>Registros de Hoje</h3></div>
-            <div id="dashboard-registros-hoje"></div>
+          <!-- Dashboard do funcionário -->
+          <div id="dashboard-func" class="hidden">
+            <div class="stats-grid" id="dashboard-stats-func"></div>
+            <div class="card">
+              <div class="card-header"><h3>Registros de Hoje</h3></div>
+              <div id="dashboard-registros-hoje"></div>
+            </div>
           </div>
-          <div class="card" id="dashboard-banco-card">
-            <div class="card-header"><h3>Banco de Horas - M&ecirc;s Atual</h3></div>
-            <div id="dashboard-banco"></div>
+
+          <!-- Dashboard do admin -->
+          <div id="dashboard-admin" class="hidden">
+            <div class="stats-grid" id="dashboard-stats-admin"></div>
+
+            <div class="grid-2col">
+              <div class="card">
+                <div class="card-header"><h3>Presen&ccedil;a Di&aacute;ria no M&ecirc;s</h3></div>
+                <div class="chart-container"><canvas id="chart-presenca"></canvas></div>
+              </div>
+              <div class="card">
+                <div class="card-header"><h3>Horas por Departamento</h3></div>
+                <div class="chart-container"><canvas id="chart-departamentos"></canvas></div>
+              </div>
+            </div>
+
+            <div class="grid-2col">
+              <div class="card">
+                <div class="card-header"><h3>Status de Hoje</h3></div>
+                <div class="chart-container chart-sm"><canvas id="chart-status-hoje"></canvas></div>
+              </div>
+              <div class="card">
+                <div class="card-header"><h3>Atrasados Hoje</h3></div>
+                <div id="admin-atrasados">
+                  <p class="text-muted text-center">Carregando...</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3>Quadro de Presen&ccedil;a - Hoje</h3>
+                <span class="badge badge-info" id="admin-presenca-count"></span>
+              </div>
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr><th>Colaborador</th><th>Cargo</th><th>Depto</th><th>Entrada</th><th>Sa&iacute;da Alm.</th><th>Retorno</th><th>Sa&iacute;da</th><th>Status</th></tr>
+                  </thead>
+                  <tbody id="admin-presenca-body"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -133,12 +208,12 @@
       <!-- FUNCIONARIOS -->
       <div id="page-funcionarios" class="page hidden">
         <div class="page-header">
-          <h1>Funcion&aacute;rios</h1>
-          <button class="btn btn-primary" id="btn-novo-funcionario">+ Novo Funcion&aacute;rio</button>
+          <h1>Colaboradores</h1>
+          <button class="btn btn-primary" id="btn-novo-funcionario">+ Novo Colaborador</button>
         </div>
         <div class="page-body">
           <div class="filter-bar">
-            <input type="text" id="filtro-busca" class="form-control" placeholder="Buscar por nome, email...">
+            <input type="text" id="filtro-busca" class="form-control" placeholder="Buscar por nome, usu&aacute;rio...">
             <select id="filtro-depto" class="form-control"><option value="">Todos os departamentos</option></select>
             <select id="filtro-ativo" class="form-control">
               <option value="1">Ativos</option><option value="0">Inativos</option>
@@ -149,7 +224,7 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Nome</th><th>Email</th><th>Cargo</th><th>Depto</th>
+                    <th>Nome</th><th>Usu&aacute;rio</th><th>Cargo</th><th>Depto</th>
                     <th>Jornada</th><th>Role</th><th>A&ccedil;&otilde;es</th>
                   </tr>
                 </thead>
@@ -169,7 +244,7 @@
             <div class="table-container">
               <table>
                 <thead>
-                  <tr><th>Funcion&aacute;rio</th><th>Data</th><th>Tipo</th><th>Nova Hora</th><th>Motivo</th><th>A&ccedil;&otilde;es</th></tr>
+                  <tr><th>Colaborador</th><th>Data</th><th>Tipo</th><th>Nova Hora</th><th>Motivo</th><th>A&ccedil;&otilde;es</th></tr>
                 </thead>
                 <tbody id="ajustes-pendentes-body"></tbody>
               </table>
@@ -194,7 +269,7 @@
             <div class="table-container">
               <table>
                 <thead>
-                  <tr><th>Funcion&aacute;rio</th><th>Cargo</th><th>Depto</th><th>Total Horas</th><th>Dias Trabalhados</th><th>Faltas</th><th>A&ccedil;&otilde;es</th></tr>
+                  <tr><th>Colaborador</th><th>Cargo</th><th>Depto</th><th>Total Horas</th><th>Dias Trabalhados</th><th>Faltas</th><th>A&ccedil;&otilde;es</th></tr>
                 </thead>
                 <tbody id="relatorio-body"></tbody>
               </table>
@@ -218,7 +293,7 @@
             <div class="table-container">
               <table>
                 <thead>
-                  <tr><th>Funcion&aacute;rio</th><th>Data</th><th>Registros</th><th>Problemas</th></tr>
+                  <tr><th>Colaborador</th><th>Data</th><th>Registros</th><th>Problemas</th></tr>
                 </thead>
                 <tbody id="inconsistencias-body"></tbody>
               </table>
@@ -263,11 +338,31 @@
           <div class="card">
             <div class="card-header"><h3>Hor&aacute;rios de Trabalho</h3></div>
             <div class="form-group">
-              <label>Funcion&aacute;rio</label>
+              <label>Colaborador</label>
               <select id="config-funcionario" class="form-control"></select>
             </div>
             <div id="config-horarios-grid"></div>
             <button class="btn btn-primary mt-2" id="btn-salvar-horarios">Salvar Hor&aacute;rios</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- HOLERITES -->
+      <div id="page-holerites" class="page hidden">
+        <div class="page-header">
+          <h1>Meus Holerites</h1>
+          <div class="btn-group">
+            <select id="holerite-mes" class="form-control"></select>
+            <select id="holerite-ano" class="form-control"></select>
+            <button class="btn btn-primary" id="btn-gerar-holerite">Gerar</button>
+            <button class="btn btn-secondary" id="btn-holerite-pdf">Baixar PDF</button>
+          </div>
+        </div>
+        <div class="page-body">
+          <div class="card" id="holerite-preview">
+            <div class="text-center text-muted" style="padding:40px;">
+              Selecione o m&ecirc;s e clique em "Gerar" para visualizar seu holerite.
+            </div>
           </div>
         </div>
       </div>
@@ -298,7 +393,7 @@
   <div class="modal-overlay" id="modal-funcionario">
     <div class="modal">
       <div class="modal-header">
-        <h3 id="modal-func-title">Novo Funcion&aacute;rio</h3>
+        <h3 id="modal-func-title">Novo Colaborador</h3>
         <button class="modal-close" onclick="closeModal('modal-funcionario')">&times;</button>
       </div>
       <div class="modal-body">
@@ -310,13 +405,18 @@
               <input type="text" id="func-nome" class="form-control" required>
             </div>
             <div class="form-group">
-              <label>Email *</label>
-              <input type="email" id="func-email" class="form-control" required>
+              <label>Usu&aacute;rio *</label>
+              <input type="text" id="func-usuario" class="form-control" placeholder="ex: felipe.silva" required>
             </div>
           </div>
+          <div class="form-group">
+            <label>Email (opcional)</label>
+            <input type="email" id="func-email" class="form-control" placeholder="email@empresa.com">
+          </div>
           <div class="form-group" id="func-senha-group">
-            <label>Senha *</label>
-            <input type="password" id="func-senha" class="form-control">
+            <label>Senha Inicial *</label>
+            <input type="text" id="func-senha" class="form-control" placeholder="Senha que o colaborador usar&aacute; no primeiro login">
+            <small class="text-muted">O colaborador dever&aacute; trocar no primeiro acesso.</small>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -336,7 +436,7 @@
             <div class="form-group">
               <label>Perfil</label>
               <select id="func-role" class="form-control">
-                <option value="funcionario">Funcion&aacute;rio</option>
+                <option value="funcionario">Colaborador</option>
                 <option value="admin">Administrador</option>
               </select>
             </div>
@@ -411,6 +511,79 @@
     </div>
   </div>
 
+  <!-- MODAL TROCA DE SENHA OBRIGATÓRIA -->
+  <div class="modal-overlay" id="modal-trocar-senha">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>&#128274; Troca de Senha Obrigat&oacute;ria</h3>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom:16px;">Sua senha &eacute; tempor&aacute;ria. Por seguran&ccedil;a, voc&ecirc; precisa criar uma nova senha antes de continuar.</p>
+        <form id="form-trocar-senha">
+          <div class="form-group">
+            <label>Senha Atual (tempor&aacute;ria)</label>
+            <input type="password" id="troca-senha-atual" class="form-control" required placeholder="Digite a senha atual">
+          </div>
+          <div class="form-group">
+            <label>Nova Senha</label>
+            <input type="password" id="troca-nova-senha" class="form-control" required placeholder="M&iacute;nimo 6 caracteres" minlength="6">
+          </div>
+          <div class="form-group">
+            <label>Confirmar Nova Senha</label>
+            <input type="password" id="troca-confirmar-senha" class="form-control" required placeholder="Repita a nova senha" minlength="6">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-confirmar-troca-senha" style="width:100%;">Alterar Senha e Continuar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL RESETAR SENHA (admin) -->
+  <div class="modal-overlay" id="modal-resetar-senha">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Resetar Senha</h3>
+        <button class="modal-close" onclick="closeModal('modal-resetar-senha')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Colaborador: <strong id="reset-func-nome"></strong></p>
+        <p class="text-muted">Usu&aacute;rio: <span id="reset-func-usuario"></span></p>
+        <div class="form-group" style="margin-top:12px;">
+          <label>Nova Senha (deixe vazio para gerar automaticamente)</label>
+          <input type="text" id="reset-nova-senha" class="form-control" placeholder="Gerar automaticamente">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-resetar-senha')">Cancelar</button>
+        <button class="btn btn-primary" id="btn-confirmar-reset-senha">Resetar Senha</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL RESULTADO RESET SENHA -->
+  <div class="modal-overlay" id="modal-senha-gerada">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>&#9989; Senha Resetada</h3>
+        <button class="modal-close" onclick="closeModal('modal-senha-gerada')">&times;</button>
+      </div>
+      <div class="modal-body" style="text-align:center;">
+        <p>Comunique os dados abaixo ao colaborador:</p>
+        <div style="background:var(--gray-100);padding:16px;border-radius:8px;margin:12px 0;">
+          <p><strong>Usu&aacute;rio:</strong> <span id="gerada-usuario" style="font-family:monospace;font-size:16px;"></span></p>
+          <p style="margin-top:8px;"><strong>Nova Senha:</strong> <span id="gerada-senha" style="font-family:monospace;font-size:16px;color:var(--danger);"></span></p>
+        </div>
+        <p class="text-muted" style="font-size:12px;">O colaborador dever&aacute; trocar a senha no pr&oacute;ximo login.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeModal('modal-senha-gerada')" style="width:100%;">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/offline.js"></script>
   <script src="js/api.js"></script>
   <script src="js/app.js"></script>
 </body>

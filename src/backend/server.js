@@ -11,6 +11,7 @@ const horasRoutes = require('./routes/horas');
 const ajustesRoutes = require('./routes/ajustes');
 const relatoriosRoutes = require('./routes/relatorios');
 const configuracoesRoutes = require('./routes/configuracoes');
+const dashboardRoutes = require('./routes/dashboard');
 
 const app = express();
 
@@ -20,8 +21,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 app.use(express.static(path.join(__dirname, '../frontend')));
 
+// Health check (não precisa de auth, verifica conexão com MySQL)
+app.get('/api/health', async (req, res) => {
+  try {
+    const { pool } = require('./database');
+    await pool.execute('SELECT 1');
+    res.json({ status: 'online', timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(503).json({ status: 'offline', timestamp: new Date().toISOString() });
+  }
+});
+
 // Rotas da API
 app.use('/api/auth', authRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/funcionarios', funcionariosRoutes);
 app.use('/api/ponto', pontoRoutes);
 app.use('/api/horas', horasRoutes);
@@ -40,6 +53,14 @@ async function startServer(port) {
     console.log(`Servidor rodando na porta ${port || process.env.PORT || 3131}`);
   });
   return servidor;
+}
+
+// Se executado diretamente (npm run dev / make dev)
+if (require.main === module) {
+  startServer().catch(err => {
+    console.error('Erro ao iniciar servidor:', err);
+    process.exit(1);
+  });
 }
 
 module.exports = { app, startServer };

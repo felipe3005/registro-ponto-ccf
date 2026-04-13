@@ -8,18 +8,30 @@ async function seed() {
 
     const senhaHash = await bcrypt.hash('admin123', 10);
 
-    await pool.execute(
-      `INSERT IGNORE INTO rp_funcionarios (nome, email, senha_hash, cargo, departamento, jornada_semanal, role)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ['Administrador', 'admin@ccf.com', senhaHash, 'Administrador', 'TI', 44, 'admin']
+    // Verificar se já existe algum admin
+    const [admins] = await pool.execute(
+      "SELECT id, usuario FROM rp_funcionarios WHERE role = 'admin' LIMIT 1"
     );
 
-    console.log('=================================');
-    console.log('  Seed executado com sucesso!');
-    console.log('=================================');
-    console.log('  Email: admin@ccf.com');
-    console.log('  Senha: admin123');
-    console.log('=================================');
+    if (admins.length === 0) {
+      await pool.execute(
+        `INSERT INTO rp_funcionarios (nome, usuario, email, senha_hash, senha_temporaria, cargo, departamento, jornada_semanal, role)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['Administrador', 'admin', 'noreply@creditocasafinanciamentos.com.br', senhaHash, 1, 'Administrador', 'TI', 44, 'admin']
+      );
+      console.log('=================================');
+      console.log('  Admin criado com sucesso!');
+      console.log('  Usu��rio: admin');
+      console.log('  Senha: admin123');
+      console.log('  (Troque a senha no primeiro login)');
+      console.log('=================================');
+    } else {
+      console.log('=================================');
+      console.log('  Admin já existe (id:', admins[0].id + ')');
+      console.log('  Usuário:', admins[0].usuario || '(sem usuario definido)');
+      console.log('  Tabelas verificadas com sucesso.');
+      console.log('=================================');
+    }
 
     process.exit(0);
   } catch (err) {

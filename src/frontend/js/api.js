@@ -55,10 +55,11 @@ class Api {
   }
 
   // Auth
-  login(email, senha) { return this.request('POST', '/auth/login', { email, senha }); }
+  login(usuario, senha) { return this.request('POST', '/auth/login', { usuario, senha }); }
   logout() { return this.request('POST', '/auth/logout'); }
   me() { return this.request('GET', '/auth/me'); }
   alterarSenha(senhaAtual, novaSenha) { return this.request('POST', '/auth/alterar-senha', { senhaAtual, novaSenha }); }
+  resetarSenha(funcionarioId, novaSenha) { return this.request('POST', `/funcionarios/${funcionarioId}/resetar-senha`, { novaSenha: novaSenha || undefined }); }
 
   // Funcionários
   listarFuncionarios(params = {}) {
@@ -73,6 +74,7 @@ class Api {
 
   // Ponto
   registrarPonto() { return this.request('POST', '/ponto/registrar'); }
+  sincronizarPonto(registros) { return this.request('POST', '/ponto/sync', { registros }); }
   ultimoRegistro() { return this.request('GET', '/ponto/ultimo'); }
   registrosDia(data, funcionarioId) {
     const params = new URLSearchParams({ data });
@@ -111,6 +113,9 @@ class Api {
   inconsistencias(mes, ano) {
     return this.request('GET', `/relatorios/inconsistencias?mes=${mes}&ano=${ano}`);
   }
+
+  // Dashboard
+  dashboardAdmin() { return this.request('GET', '/dashboard/admin'); }
 
   // Configurações
   buscarHorarios(funcionarioId) { return this.request('GET', `/configuracoes/horario/${funcionarioId}`); }

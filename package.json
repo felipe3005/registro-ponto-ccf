@@ -1,6 +1,6 @@
 {
   "name": "registro-ponto-ccf",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "main.js",
   "description": "Sistema de Registro de Ponto Digital - CCF",
   "author": "CCF",
@@ -11,6 +11,9 @@
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build": "electron-builder --win --mac",
+    "release": "electron-builder --win --mac --publish always",
+    "release:win": "electron-builder --win --publish always",
+    "release:mac": "electron-builder --mac --publish always",
     "init-db": "node -e \"require('./src/backend/database').initDatabase().then(() => { console.log('OK'); process.exit(); })\""
   },
   "build": {
@@ -28,27 +31,35 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "icon.png"
+      "icon": "src/frontend/images/icon.png"
     },
     "mac": {
       "target": "dmg",
-      "icon": "icon.png"
+      "icon": "src/frontend/images/icon.png"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerHeaderIcon": "icon.png"
-    }
+      "installerHeaderIcon": "src/frontend/images/icon.png"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "felipe3005",
+        "repo": "registro-ponto-ccf"
+      }
+    ]
   },
   "devDependencies": {
-    "electron": "^41.2.0"
+    "electron": "^35.7.5",
+    "electron-builder": "^26.8.1"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "csv-writer": "^1.6.0",
     "dotenv": "^17.4.1",
-    "electron-builder": "^26.8.1",
+    "electron-updater": "^6.8.3",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "moment": "^2.30.1",

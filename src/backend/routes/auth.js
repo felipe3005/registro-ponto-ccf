@@ -6,17 +6,17 @@ const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Login
+// Login por usuario
 router.post('/login', async (req, res) => {
   try {
-    const { email, senha } = req.body;
-    if (!email || !senha) {
-      return res.status(400).json({ error: 'Email e senha são obrigatórios' });
+    const { usuario, senha } = req.body;
+    if (!usuario || !senha) {
+      return res.status(400).json({ error: 'Usuário e senha são obrigatórios' });
     }
 
     const [rows] = await pool.execute(
-      'SELECT * FROM rp_funcionarios WHERE email = ? AND ativo = 1',
-      [email]
+      'SELECT * FROM rp_funcionarios WHERE usuario = ? AND ativo = 1',
+      [usuario.toLowerCase().trim()]
     );
 
     if (rows.length === 0) {
@@ -30,7 +30,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, nome: user.nome },
+      { id: user.id, usuario: user.usuario, role: user.role, nome: user.nome },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
@@ -40,11 +40,13 @@ router.post('/login', async (req, res) => {
       user: {
         id: user.id,
         nome: user.nome,
+        usuario: user.usuario,
         email: user.email,
         role: user.role,
         cargo: user.cargo,
         departamento: user.departamento
-      }
+      },
+      senhaTemporaria: user.senha_temporaria === 1
     });
   } catch (err) {
     console.error('Erro no login:', err);
@@ -61,7 +63,7 @@ router.post('/logout', authMiddleware, (req, res) => {
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      'SELECT id, nome, email, cargo, departamento, role FROM rp_funcionarios WHERE id = ?',
+      'SELECT id, nome, usuario, email, cargo, departamento, role, senha_temporaria FROM rp_funcionarios WHERE id = ?',
       [req.user.id]
     );
     if (rows.length === 0) {
@@ -73,34 +75,15 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
-// Resetar senha (simplificado - gera nova senha temporária)
-router.post('/resetar-senha', async (req, res) => {
-  try {
-    const { email } = req.body;
-    const [rows] = await pool.execute(
-      'SELECT id FROM rp_funcionarios WHERE email = ? AND ativo = 1',
-      [email]
-    );
-
-    if (rows.length === 0) {
-      return res.json({ message: 'Se o email existir, uma nova senha será enviada' });
-    }
-
-    const novaSenha = Math.random().toString(36).slice(-8);
-    const hash = await bcrypt.hash(novaSenha, 10);
-    await pool.execute('UPDATE rp_funcionarios SET senha_hash = ? WHERE email = ?', [hash, email]);
-
-    // Em produção, enviar por email. Aqui retornamos para o admin
-    res.json({ message: 'Senha redefinida', novaSenha });
-  } catch (err) {
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// Alterar senha
+// Trocar senha (usado na troca obrigatória e na troca voluntária)
 router.post('/alterar-senha', authMiddleware, async (req, res) => {
   try {
     const { senhaAtual, novaSenha } = req.body;
+
+    if (!novaSenha || novaSenha.length < 6) {
+      return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres' });
+    }
+
     const [rows] = await pool.execute('SELECT senha_hash FROM rp_funcionarios WHERE id = ?', [req.user.id]);
 
     const valida = await bcrypt.compare(senhaAtual, rows[0].senha_hash);
@@ -109,7 +92,10 @@ router.post('/alterar-senha', authMiddleware, async (req, res) => {
     }
 
     const hash = await bcrypt.hash(novaSenha, 10);
-    await pool.execute('UPDATE rp_funcionarios SET senha_hash = ? WHERE id = ?', [hash, req.user.id]);
+    await pool.execute(
+      'UPDATE rp_funcionarios SET senha_hash = ?, senha_temporaria = 0 WHERE id = ?',
+      [hash, req.user.id]
+    );
 
     res.json({ message: 'Senha alterada com sucesso' });
   } catch (err) {

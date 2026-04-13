@@ -21,8 +21,10 @@ async function initDatabase() {
       CREATE TABLE IF NOT EXISTS rp_funcionarios (
         id INT AUTO_INCREMENT PRIMARY KEY,
         nome VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL UNIQUE,
+        usuario VARCHAR(100) NOT NULL UNIQUE,
+        email VARCHAR(255),
         senha_hash VARCHAR(255) NOT NULL,
+        senha_temporaria TINYINT(1) DEFAULT 1,
         cargo VARCHAR(100),
         departamento VARCHAR(100),
         jornada_semanal DECIMAL(5,2) DEFAULT 44.00,
@@ -31,6 +33,21 @@ async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Migração: adicionar colunas novas se tabela já existia sem elas
+    const [cols] = await conn.execute(`SHOW COLUMNS FROM rp_funcionarios`);
+    const colNames = cols.map(c => c.Field);
+    if (!colNames.includes('usuario')) {
+      await conn.execute(`ALTER TABLE rp_funcionarios ADD COLUMN usuario VARCHAR(100) AFTER nome`);
+      // Gerar usuario a partir do email para registros existentes
+      await conn.execute(`UPDATE rp_funcionarios SET usuario = LOWER(REPLACE(SUBSTRING_INDEX(email, '@', 1), ' ', '.')) WHERE usuario IS NULL OR usuario = ''`);
+      await conn.execute(`ALTER TABLE rp_funcionarios MODIFY COLUMN usuario VARCHAR(100) NOT NULL`);
+      // Tentar adicionar UNIQUE (pode falhar se houver duplicados)
+      try { await conn.execute(`ALTER TABLE rp_funcionarios ADD UNIQUE INDEX uk_usuario (usuario)`); } catch(e) {}
+    }
+    if (!colNames.includes('senha_temporaria')) {
+      await conn.execute(`ALTER TABLE rp_funcionarios ADD COLUMN senha_temporaria TINYINT(1) DEFAULT 0 AFTER senha_hash`);
+    }
 
     // Tabela de registros de ponto
     await conn.execute(`
