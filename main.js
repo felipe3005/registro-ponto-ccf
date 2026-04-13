@@ -1,5 +1,25 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
+
+// Log de erros em arquivo para diagnostico
+var logPath = path.join(app.getPath('userData'), 'app.log');
+function logToFile(msg) {
+  var line = new Date().toISOString() + ' ' + msg + '\n';
+  try { fs.appendFileSync(logPath, line); } catch(e) {}
+  console.log(msg);
+}
+
+logToFile('=== App iniciando ===');
+logToFile('__dirname: ' + __dirname);
+logToFile('userData: ' + app.getPath('userData'));
+
+// Carregar .env antes de qualquer coisa (caminho correto tanto em dev quanto instalado)
+var envPath = path.join(__dirname, '.env');
+logToFile('.env path: ' + envPath);
+logToFile('.env existe: ' + fs.existsSync(envPath));
+require('dotenv').config({ path: envPath });
+
 const { startServer } = require('./src/backend/server');
 
 let mainWindow;
@@ -119,8 +139,12 @@ function createWindow() {
         { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: function() { mainWindow.reload(); } },
         { type: 'separator' },
         { label: 'Verificar Atualizacoes', click: function() {
-          autoUpdater.checkForUpdates().catch(() => {});
-          sendToWindow('update-status', { status: 'checking', message: 'Verificando atualizacoes...' });
+          if (autoUpdater) {
+            autoUpdater.checkForUpdates().catch(() => {});
+            sendToWindow('update-status', { status: 'checking', message: 'Verificando atualizacoes...' });
+          } else {
+            dialog.showMessageBox(mainWindow, { type: 'info', title: 'Atualizacoes', message: 'Sistema de atualizacao nao disponivel.' });
+          }
         }},
         { type: 'separator' },
         { label: 'Sobre', click: function() {
@@ -156,12 +180,19 @@ function createWindow() {
 // ==================== APP LIFECYCLE ====================
 app.on('ready', async function() {
   try {
+    logToFile('App ready, iniciando servidor na porta ' + PORT);
     server = await startServer(PORT);
-    console.log('Servidor iniciado na porta ' + PORT);
+    logToFile('Servidor iniciado com sucesso');
     createWindow();
     setupAutoUpdater();
   } catch (err) {
-    console.error('Erro ao iniciar servidor:', err);
+    logToFile('ERRO ao iniciar: ' + err.message);
+    logToFile('Stack: ' + err.stack);
+    dialog.showErrorBox('Erro ao iniciar Ponto Digital',
+      'Nao foi possivel iniciar o sistema.\n\n' +
+      'Erro: ' + err.message + '\n\n' +
+      'Log salvo em: ' + logPath
+    );
     app.quit();
   }
 });
