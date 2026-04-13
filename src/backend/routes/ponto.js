@@ -6,6 +6,7 @@ const { authMiddleware } = require('../middleware/auth');
 const router = express.Router();
 
 const ORDEM_TIPOS = ['entrada', 'saida_almoco', 'retorno_almoco', 'saida'];
+const ALMOCO_MINIMO_MINUTOS = 60;
 
 // Registrar ponto
 router.post('/registrar', authMiddleware, async (req, res) => {
@@ -19,7 +20,7 @@ router.post('/registrar', authMiddleware, async (req, res) => {
 
     // Buscar último registro do dia
     const [registros] = await pool.execute(
-      `SELECT tipo FROM rp_registros_ponto
+      `SELECT tipo, data_hora FROM rp_registros_ponto
        WHERE funcionario_id = ? AND DATE(data_hora) = ?
        ORDER BY data_hora ASC`,
       [funcionarioId, hoje]
@@ -42,6 +43,20 @@ router.post('/registrar', authMiddleware, async (req, res) => {
     const jaRegistrado = registros.some(r => r.tipo === proximoTipo);
     if (jaRegistrado) {
       return res.status(400).json({ error: `Registro de ${proximoTipo} já existe para hoje` });
+    }
+
+    // Trava: retorno do almoço só após ALMOCO_MINIMO_MINUTOS
+    if (proximoTipo === 'retorno_almoco') {
+      const saidaAlmoco = registros.find(r => r.tipo === 'saida_almoco');
+      if (saidaAlmoco) {
+        const minutosDecorridos = agora.diff(moment(saidaAlmoco.data_hora), 'minutes');
+        if (minutosDecorridos < ALMOCO_MINIMO_MINUTOS) {
+          const faltam = ALMOCO_MINIMO_MINUTOS - minutosDecorridos;
+          return res.status(400).json({
+            error: `O almoço deve ter no mínimo ${ALMOCO_MINIMO_MINUTOS} minutos. Aguarde mais ${faltam} minuto(s) para registrar o retorno.`
+          });
+        }
+      }
     }
 
     const ip = req.ip || req.connection.remoteAddress;
@@ -78,9 +93,19 @@ router.get('/ultimo', authMiddleware, async (req, res) => {
       proximoTipo = idx < ORDEM_TIPOS.length - 1 ? ORDEM_TIPOS[idx + 1] : null;
     }
 
+    // Info do almoço para trava de 1h
+    const [almocoRows] = await pool.execute(
+      `SELECT data_hora FROM rp_registros_ponto
+       WHERE funcionario_id = ? AND DATE(data_hora) = ? AND tipo = 'saida_almoco'
+       LIMIT 1`,
+      [req.user.id, hoje]
+    );
+
     res.json({
       ultimoRegistro: rows[0] || null,
-      proximoTipo
+      proximoTipo,
+      saidaAlmoco: almocoRows[0] ? almocoRows[0].data_hora : null,
+      almocoMinimoMinutos: ALMOCO_MINIMO_MINUTOS
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro interno do servidor' });
@@ -157,6 +182,27 @@ router.post('/sync', authMiddleware, async (req, res) => {
         if (existente.length > 0) {
           resultados.push({ id: reg.offline_id, status: 'duplicado', tipo: reg.tipo, data: dia });
           continue;
+        }
+
+        // Trava: retorno do almoço só após ALMOCO_MINIMO_MINUTOS
+        if (reg.tipo === 'retorno_almoco') {
+          const [saidaAlm] = await pool.execute(
+            `SELECT data_hora FROM rp_registros_ponto
+             WHERE funcionario_id = ? AND DATE(data_hora) = ? AND tipo = 'saida_almoco'
+             LIMIT 1`,
+            [funcionarioId, dia]
+          );
+          if (saidaAlm.length > 0) {
+            const diff = dataHora.diff(moment(saidaAlm[0].data_hora), 'minutes');
+            if (diff < ALMOCO_MINIMO_MINUTOS) {
+              resultados.push({
+                id: reg.offline_id,
+                status: 'erro',
+                erro: `Almoço inferior a ${ALMOCO_MINIMO_MINUTOS} minutos (${diff} min)`
+              });
+              continue;
+            }
+          }
         }
 
         await pool.execute(

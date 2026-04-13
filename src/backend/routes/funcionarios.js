@@ -189,4 +189,62 @@ router.patch('/:id/reativar', authMiddleware, adminMiddleware, async (req, res) 
   }
 });
 
+// Excluir funcionário definitivamente (hard delete - limpa todos os dados relacionados)
+router.delete('/:id/excluir-definitivo', authMiddleware, adminMiddleware, async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const funcionarioId = req.params.id;
+
+    // Proteger: não permitir excluir a si mesmo
+    if (parseInt(funcionarioId) === req.user.id) {
+      conn.release();
+      return res.status(400).json({ error: 'Você não pode excluir seu próprio usuário' });
+    }
+
+    // Verificar se existe
+    const [exists] = await conn.execute('SELECT id, nome, usuario FROM rp_funcionarios WHERE id = ?', [funcionarioId]);
+    if (exists.length === 0) {
+      conn.release();
+      return res.status(404).json({ error: 'Colaborador não encontrado' });
+    }
+
+    await conn.beginTransaction();
+
+    // Limpar todas as tabelas relacionadas (ignora erros de tabelas que não existem)
+    const tabelas = [
+      'rp_registros_ponto',
+      'rp_ajustes_ponto',
+      'rp_abonos',
+      'rp_atestados',
+      'rp_faltas',
+      'rp_configuracoes_horario'
+    ];
+
+    for (const tabela of tabelas) {
+      try {
+        await conn.execute(`DELETE FROM ${tabela} WHERE funcionario_id = ?`, [funcionarioId]);
+      } catch (e) {
+        // Tabela pode não existir em versões antigas - ignora
+        console.warn(`Aviso ao limpar ${tabela}:`, e.message);
+      }
+    }
+
+    // Finalmente, remover o funcionário
+    await conn.execute('DELETE FROM rp_funcionarios WHERE id = ?', [funcionarioId]);
+
+    await conn.commit();
+    conn.release();
+
+    res.json({
+      message: `Colaborador ${exists[0].nome} excluído definitivamente com sucesso`,
+      usuario: exists[0].usuario
+    });
+  } catch (err) {
+    await conn.rollback();
+    conn.release();
+    console.error('Erro ao excluir colaborador definitivamente:', err);
+    res.status(500).json({ error: 'Erro ao excluir colaborador: ' + err.message });
+  }
+});
+
 module.exports = router;

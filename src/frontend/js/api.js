@@ -36,7 +36,7 @@ class Api {
 
     const res = await fetch(`${API_BASE}${path}`, opts);
 
-    if (res.status === 401 && path !== '/auth/login') {
+    if (res.status === 401 && path !== '/auth/login' && path !== '/auth/me') {
       this.setToken(null);
       this.setUser(null);
       window.location.reload();
@@ -71,6 +71,7 @@ class Api {
   editarFuncionario(id, dados) { return this.request('PUT', `/funcionarios/${id}`, dados); }
   desativarFuncionario(id) { return this.request('DELETE', `/funcionarios/${id}`); }
   reativarFuncionario(id) { return this.request('PATCH', `/funcionarios/${id}/reativar`); }
+  excluirFuncionarioDefinitivo(id) { return this.request('DELETE', `/funcionarios/${id}/excluir-definitivo`); }
 
   // Ponto
   registrarPonto() { return this.request('POST', '/ponto/registrar'); }

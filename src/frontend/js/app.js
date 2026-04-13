@@ -11,28 +11,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const token = localStorage.getItem('token');
   if (token) {
-    currentUser = api.getUser();
-    if (currentUser) {
+    // Sempre validar o token contra o servidor para evitar sessão antiga
+    // (ex: usuário foi excluído ou senha foi resetada)
+    api.me().then(user => {
+      currentUser = user;
+      api.setUser(user);
       showApp();
-    } else {
-      api.me().then(user => {
-        currentUser = user;
-        api.setUser(user);
-        showApp();
-      }).catch(() => {
-        // Se offline e tem credenciais cacheadas, usa dados locais
-        if (!OfflineManager.isOnline() && OfflineManager.hasCachedCredentials()) {
-          const cached = JSON.parse(localStorage.getItem('offline_credentials'));
-          if (cached && cached.user) {
-            currentUser = cached.user;
-            api.setUser(cached.user);
-            showApp();
-            return;
-          }
+    }).catch((err) => {
+      const isNetworkError = err && (err.message === 'Failed to fetch' || (err.message || '').includes('NetworkError'));
+      if (isNetworkError && OfflineManager.hasCachedCredentials()) {
+        // Offline: usar cache local
+        const cached = JSON.parse(localStorage.getItem('offline_credentials'));
+        if (cached && cached.user) {
+          currentUser = cached.user;
+          api.setUser(cached.user);
+          showApp();
+          return;
         }
-        showLogin();
-      });
-    }
+      }
+      // Token inválido (usuário excluído, senha resetada etc) - limpar tudo
+      api.setToken(null);
+      api.setUser(null);
+      OfflineManager.clearCredentials();
+      currentUser = null;
+      showLogin();
+    });
   } else {
     showLogin();
   }
@@ -72,7 +75,17 @@ document.getElementById('form-login').addEventListener('submit', async (e) => {
     // Verificar se foi erro de credencial (servidor respondeu) ou erro de rede
     const isNetworkError = err.message === 'Failed to fetch' || err.message.includes('NetworkError') || err.message === 'Sessão expirada';
     if (!isNetworkError) {
-      // Erro de credencial - servidor respondeu com erro
+      // Erro de credencial - servidor respondeu com erro.
+      // Limpar cache offline deste usuário (pode estar desatualizado, ex: usuário excluído/recriado)
+      const cached = localStorage.getItem('offline_credentials');
+      if (cached) {
+        try {
+          const cred = JSON.parse(cached);
+          if (cred.usuario === usuario) {
+            OfflineManager.clearCredentials();
+          }
+        } catch (e) {}
+      }
       toast('Usuário ou senha incorretos. Se esqueceu sua senha, solicite ao administrador para resetá-la.', 'error');
       return;
     }
@@ -466,6 +479,40 @@ function updateClock() {
   document.getElementById('date-display').textContent = formatDateBRFull(now);
 }
 
+const ALMOCO_MINIMO_MINUTOS = 60;
+let almocoLockInterval = null;
+
+function aplicarTravaAlmoco(btn, info, proximoTipo, saidaAlmocoTs, labelRegistro, sufixoInfo) {
+  // Limpa interval anterior
+  if (almocoLockInterval) { clearInterval(almocoLockInterval); almocoLockInterval = null; }
+  if (proximoTipo !== 'retorno_almoco' || !saidaAlmocoTs) return false;
+
+  const saidaMs = new Date(saidaAlmocoTs).getTime();
+  const liberaMs = saidaMs + ALMOCO_MINIMO_MINUTOS * 60 * 1000;
+
+  function atualizar() {
+    const agora = Date.now();
+    const restanteMs = liberaMs - agora;
+    if (restanteMs <= 0) {
+      btn.disabled = false;
+      btn.textContent = labelRegistro;
+      info.textContent = `Próximo registro: retorno almoço${sufixoInfo}`;
+      if (almocoLockInterval) { clearInterval(almocoLockInterval); almocoLockInterval = null; }
+      return;
+    }
+    const totalSeg = Math.ceil(restanteMs / 1000);
+    const min = Math.floor(totalSeg / 60);
+    const seg = totalSeg % 60;
+    btn.disabled = true;
+    btn.textContent = `Aguarde ${pad(min)}:${pad(seg)} para retornar do almoço`;
+    info.textContent = `🍽️ Almoço mínimo de ${ALMOCO_MINIMO_MINUTOS} minutos. Liberação em ${pad(min)}:${pad(seg)}${sufixoInfo}`;
+  }
+
+  atualizar();
+  almocoLockInterval = setInterval(atualizar, 1000);
+  return true;
+}
+
 async function loadRegistrosPonto() {
   const ORDEM_TIPOS = ['entrada', 'saida_almoco', 'retorno_almoco', 'saida'];
   const labels = {
@@ -515,6 +562,14 @@ async function loadRegistrosPonto() {
         btn.disabled = false;
         btn.classList.add(proximoTipo);
         info.textContent = `Próximo registro: ${proximoTipo.replace(/_/g, ' ')}`;
+
+        // Trava de 1h de almoço (busca saida_almoco do servidor ou fila offline)
+        let saidaAlmocoTs = data.saidaAlmoco || null;
+        if (!saidaAlmocoTs) {
+          const off = offlineHoje.find(r => r.tipo === 'saida_almoco');
+          if (off) saidaAlmocoTs = off.data_hora;
+        }
+        aplicarTravaAlmoco(btn, info, proximoTipo, saidaAlmocoTs, labels[proximoTipo], '');
       }
 
       // Registros do dia (servidor + offline)
@@ -560,6 +615,12 @@ async function loadRegistrosPonto() {
     btn.disabled = false;
     btn.classList.add(proximoTipo);
     info.textContent = `Próximo registro: ${proximoTipo.replace(/_/g, ' ')} (offline)`;
+
+    // Trava de 1h de almoço no modo offline
+    const offSaida = offlineHoje.find(r => r.tipo === 'saida_almoco');
+    if (offSaida) {
+      aplicarTravaAlmoco(btn, info, proximoTipo, offSaida.data_hora, labels[proximoTipo], ' (offline)');
+    }
   }
 
   // Renderizar registros offline
@@ -612,6 +673,19 @@ document.getElementById('btn-registrar-ponto').addEventListener('click', async (
       return;
     }
     proximoTipo = ORDEM_TIPOS[idx + 1];
+  }
+
+  // Trava: retorno do almoço só após 1h
+  if (proximoTipo === 'retorno_almoco') {
+    const saidaOff = offlineHoje.find(r => r.tipo === 'saida_almoco');
+    if (saidaOff) {
+      const diffMin = Math.floor((agora.getTime() - new Date(saidaOff.data_hora).getTime()) / 60000);
+      if (diffMin < ALMOCO_MINIMO_MINUTOS) {
+        const faltam = ALMOCO_MINIMO_MINUTOS - diffMin;
+        toast(`Almoço mínimo de ${ALMOCO_MINIMO_MINUTOS} minutos. Aguarde mais ${faltam} min.`, 'error');
+        return;
+      }
+    }
   }
 
   OfflineManager.addToQueue({
@@ -757,6 +831,7 @@ async function loadFuncionarios() {
               `<button class="btn btn-sm btn-success" onclick="reativarFuncionario(${f.id})">Reativar</button>`
             }
             <button class="btn btn-sm btn-primary" onclick="verEspelho(${f.id})">Espelho</button>
+            <button class="btn btn-sm btn-danger" onclick="excluirFuncionarioDefinitivo(${f.id}, '${f.nome.replace(/'/g, "\\'")}')" title="Excluir definitivamente">🗑️ Excluir</button>
           </div>
         </td>
       </tr>`;
@@ -871,6 +946,32 @@ async function reativarFuncionario(id) {
   try {
     await api.reativarFuncionario(id);
     toast('Colaborador reativado', 'success');
+    loadFuncionarios();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function excluirFuncionarioDefinitivo(id, nome) {
+  const msg = `ATENÇÃO: Esta ação é IRREVERSÍVEL!\n\nVocê está prestes a excluir DEFINITIVAMENTE o colaborador "${nome}" e TODOS os seus dados:\n- Registros de ponto\n- Ajustes solicitados\n- Abonos / atestados\n- Faltas\n- Configurações de horário\n\nDigite "EXCLUIR" para confirmar:`;
+  const resposta = prompt(msg);
+  if (resposta !== 'EXCLUIR') {
+    if (resposta !== null) toast('Exclusão cancelada', 'info');
+    return;
+  }
+  try {
+    const result = await api.excluirFuncionarioDefinitivo(id);
+    // Limpar credenciais offline em cache (caso este usuário estivesse cacheado)
+    if (typeof OfflineManager !== 'undefined' && result.usuario) {
+      const cached = localStorage.getItem('offline_credentials');
+      if (cached) {
+        try {
+          const cred = JSON.parse(cached);
+          if (cred.usuario === result.usuario) {
+            OfflineManager.clearCredentials();
+          }
+        } catch (e) {}
+      }
+    }
+    toast(result.message || 'Colaborador excluído definitivamente', 'success');
     loadFuncionarios();
   } catch (err) { toast(err.message, 'error'); }
 }
