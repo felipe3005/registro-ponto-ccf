@@ -10,36 +10,37 @@ document.addEventListener('DOMContentLoaded', () => {
   setupUpdateListener();
   loadAppVersion();
 
-  const token = localStorage.getItem('token');
-  if (token) {
-    // Sempre validar o token contra o servidor para evitar sessão antiga
-    // (ex: usuário foi excluído ou senha foi resetada)
-    api.me().then(user => {
-      currentUser = user;
-      api.setUser(user);
-      showApp();
-    }).catch((err) => {
-      const isNetworkError = err && (err.message === 'Failed to fetch' || (err.message || '').includes('NetworkError'));
-      if (isNetworkError && OfflineManager.hasCachedCredentials()) {
-        // Offline: usar cache local
-        const cached = JSON.parse(localStorage.getItem('offline_credentials'));
-        if (cached && cached.user) {
-          currentUser = cached.user;
-          api.setUser(cached.user);
-          showApp();
-          return;
-        }
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pwd-toggle');
+    if (!btn) return;
+    const input = document.getElementById(btn.dataset.target);
+    if (!input) return;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.textContent = show ? '🙈' : '👁';
+    btn.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+  });
+
+  // Firebase Auth observa o estado de login e recupera sessão automaticamente
+  fbAuth.onAuthStateChanged(async (fbUser) => {
+    if (fbUser) {
+      try {
+        currentUser = await api.me();
+        api.setUser(currentUser);
+        showApp();
+      } catch (err) {
+        // Perfil ausente / usuário excluído
+        await fbAuth.signOut();
+        api.setUser(null);
+        currentUser = null;
+        showLogin();
       }
-      // Token inválido (usuário excluído, senha resetada etc) - limpar tudo
-      api.setToken(null);
+    } else {
       api.setUser(null);
-      OfflineManager.clearCredentials();
       currentUser = null;
       showLogin();
-    });
-  } else {
-    showLogin();
-  }
+    }
+  });
 });
 
 // ==================== AUTH ====================
@@ -795,15 +796,7 @@ async function loadEspelho(funcionarioId) {
 document.getElementById('btn-gerar-espelho').addEventListener('click', () => loadEspelho());
 
 document.getElementById('btn-exportar-pdf').addEventListener('click', () => {
-  const mes = document.getElementById('espelho-mes').value;
-  const ano = document.getElementById('espelho-ano').value;
-  window.open(`${API_BASE}/relatorios/exportar/pdf?mes=${mes}&ano=${ano}&funcionario_id=${currentUser.id}`, '_blank');
-});
-
-document.getElementById('btn-exportar-csv').addEventListener('click', () => {
-  const mes = document.getElementById('espelho-mes').value;
-  const ano = document.getElementById('espelho-ano').value;
-  window.open(`${API_BASE}/relatorios/exportar/csv?mes=${mes}&ano=${ano}&funcionario_id=${currentUser.id}`, '_blank');
+  toast('Exportação em PDF indisponível nesta versão.', 'info');
 });
 
 // ==================== FUNCIONÁRIOS ====================
@@ -828,14 +821,14 @@ async function loadFuncionarios() {
         <td><span class="badge ${f.role === 'admin' ? 'badge-info' : 'badge-gray'}">${f.role}</span></td>
         <td>
           <div class="btn-group">
-            <button class="btn btn-sm btn-secondary" onclick="editarFuncionario(${f.id})">Editar</button>
-            <button class="btn btn-sm btn-warning" onclick="resetarSenhaFuncionario(${f.id}, '${f.nome.replace(/'/g, "\\'")}', '${(f.usuario || '').replace(/'/g, "\\'")}')">Resetar Senha</button>
+            <button class="btn btn-sm btn-secondary" onclick="editarFuncionario('${f.id}')">Editar</button>
+            <button class="btn btn-sm btn-warning" onclick="resetarSenhaFuncionario('${f.id}', '${f.nome.replace(/'/g, "\\'")}', '${(f.usuario || '').replace(/'/g, "\\'")}')">Resetar Senha</button>
             ${f.ativo ?
-              `<button class="btn btn-sm btn-danger" onclick="desativarFuncionario(${f.id})">Desativar</button>` :
-              `<button class="btn btn-sm btn-success" onclick="reativarFuncionario(${f.id})">Reativar</button>`
+              `<button class="btn btn-sm btn-danger" onclick="desativarFuncionario('${f.id}')">Desativar</button>` :
+              `<button class="btn btn-sm btn-success" onclick="reativarFuncionario('${f.id}')">Reativar</button>`
             }
-            <button class="btn btn-sm btn-primary" onclick="verEspelho(${f.id})">Espelho</button>
-            <button class="btn btn-sm btn-danger" onclick="excluirFuncionarioDefinitivo(${f.id}, '${f.nome.replace(/'/g, "\\'")}')" title="Excluir definitivamente">🗑️ Excluir</button>
+            <button class="btn btn-sm btn-primary" onclick="verEspelho('${f.id}')">Espelho</button>
+            <button class="btn btn-sm btn-danger" onclick="excluirFuncionarioDefinitivo('${f.id}', '${f.nome.replace(/'/g, "\\'")}')" title="Excluir definitivamente">🗑️ Excluir</button>
           </div>
         </td>
       </tr>`;
@@ -1066,8 +1059,8 @@ async function loadAjustesPendentes() {
         <td>${a.motivo}</td>
         <td>
           <div class="btn-group">
-            <button class="btn btn-sm btn-success" onclick="aprovarAjuste(${a.id})">Aprovar</button>
-            <button class="btn btn-sm btn-danger" onclick="rejeitarAjuste(${a.id})">Rejeitar</button>
+            <button class="btn btn-sm btn-success" onclick="aprovarAjuste('${a.id}')">Aprovar</button>
+            <button class="btn btn-sm btn-danger" onclick="rejeitarAjuste('${a.id}')">Rejeitar</button>
           </div>
         </td>
       </tr>
@@ -1110,8 +1103,8 @@ document.getElementById('btn-gerar-relatorio').addEventListener('click', async (
         <td>${r.diasTrabalhados}</td>
         <td>${r.faltas}</td>
         <td>
-          <button class="btn btn-sm btn-primary" onclick="verEspelhoFunc(${r.funcionario.id}, ${mes}, ${ano})">Espelho</button>
-          <button class="btn btn-sm btn-secondary" onclick="exportarPdfFunc(${r.funcionario.id}, ${mes}, ${ano})">PDF</button>
+          <button class="btn btn-sm btn-primary" onclick="verEspelhoFunc('${r.funcionario.id}', ${mes}, ${ano})">Espelho</button>
+          <button class="btn btn-sm btn-secondary" onclick="exportarPdfFunc('${r.funcionario.id}', ${mes}, ${ano})">PDF</button>
         </td>
       </tr>
     `).join('') || '<tr><td colspan="7" class="text-center text-muted">Nenhum dado encontrado</td></tr>';
@@ -1126,7 +1119,7 @@ function verEspelhoFunc(funcId, mes, ano) {
 }
 
 function exportarPdfFunc(funcId, mes, ano) {
-  window.open(`${API_BASE}/relatorios/exportar/pdf?mes=${mes}&ano=${ano}&funcionario_id=${funcId}`, '_blank');
+  toast('Exportação em PDF indisponível nesta versão.', 'info');
 }
 
 // ==================== INCONSISTÊNCIAS ====================
@@ -1164,7 +1157,7 @@ async function loadConfiguracoes() {
       return `<tr>
         <td>${dataFormatada}</td>
         <td>${f.descricao}</td>
-        <td><button class="btn btn-sm btn-danger" onclick="removerFeriado(${f.id})">Remover</button></td>
+        <td><button class="btn btn-sm btn-danger" onclick="removerFeriado('${f.id}')">Remover</button></td>
       </tr>`;
     }).join('') || '<tr><td colspan="3" class="text-center text-muted">Nenhum feriado cadastrado</td></tr>';
 
@@ -1230,8 +1223,8 @@ async function loadPerfisHorario() {
         <td>${saida}</td>
         <td>${jornada}</td>
         <td>
-          <button class="btn btn-sm btn-secondary" onclick="editarPerfil(${p.id})">Editar</button>
-          <button class="btn btn-sm btn-danger" onclick="excluirPerfil(${p.id})">Excluir</button>
+          <button class="btn btn-sm btn-secondary" onclick="editarPerfil('${p.id}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="excluirPerfil('${p.id}')">Excluir</button>
         </td>
       </tr>`;
     }).join('') || '<tr><td colspan="7" class="text-center text-muted">Nenhum perfil cadastrado</td></tr>';
@@ -1460,8 +1453,8 @@ async function loadAbonosAdmin() {
     document.getElementById('abonos-admin-body').innerHTML = abonos.map(a => {
       const acoes = a.status === 'pendente' ?
         `<div class="btn-group">
-          <button class="btn btn-sm btn-success" onclick="aprovarAbono(${a.id})">Aprovar</button>
-          <button class="btn btn-sm btn-danger" onclick="abrirRejeicaoAbono(${a.id})">Rejeitar</button>
+          <button class="btn btn-sm btn-success" onclick="aprovarAbono('${a.id}')">Aprovar</button>
+          <button class="btn btn-sm btn-danger" onclick="abrirRejeicaoAbono('${a.id}')">Rejeitar</button>
         </div>` :
         `<small class="text-muted">${a.admin_nome ? 'por ' + a.admin_nome : '-'}</small>`;
 
@@ -1508,16 +1501,11 @@ document.getElementById('abonos-filtro-status').addEventListener('change', loadA
 document.getElementById('abonos-filtro-tipo').addEventListener('change', loadAbonosAdmin);
 
 // ==================== APP VERSION ====================
+const APP_VERSION = '2.0.0';
+
 async function loadAppVersion() {
-  try {
-    const res = await fetch(API_BASE + '/version');
-    const data = await res.json();
-    const el = document.getElementById('app-version');
-    if (el) el.textContent = 'v' + data.version;
-  } catch (e) {
-    const el = document.getElementById('app-version');
-    if (el) el.textContent = '';
-  }
+  const el = document.getElementById('app-version');
+  if (el) el.textContent = 'v' + APP_VERSION;
 }
 
 function showUpdateProgress(label, pct) {

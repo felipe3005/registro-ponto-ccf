@@ -1,182 +1,191 @@
-# Ponto Digital CCF
+# Ponto Digital CCF (Firebase)
 
-Sistema de registro de ponto digital desenvolvido em Electron.js, compatível com Windows e macOS. Permite controle completo de jornada de trabalho com registro de ponto, cálculos de horas, relatórios e gestão de funcionários.
+Sistema de registro de ponto digital da **Credito Casa Financiamentos**, rodando 100% em **Firebase**: Hosting (frontend estatico), Realtime Database (dados), Authentication (login) e Storage (atestados).
 
-## Funcionalidades
+Sem backend proprio, sem Electron, sem instalador. Acesso direto pelo navegador em:
 
-### Registro de Ponto
-- Registro sequencial automático: Entrada → Saída Almoço → Retorno Almoço → Saída
-- Validação de duplicidade (impede registrar o mesmo tipo duas vezes no dia)
-- Relógio em tempo real na tela de registro
+**https://registro-de-ponto-ccf.web.app**
 
-### Gestão de Funcionários
-- Cadastro completo com cargo, departamento e jornada semanal
-- Perfis de acesso: Administrador e Funcionário
-- Soft delete (desativação/reativação)
-- Busca e filtros com paginação
+---
 
-### Cálculo de Horas
-- Horas trabalhadas por dia (entrada→saída almoço + retorno→saída)
-- Horas extras (comparação com jornada contratada)
-- Atrasos (com tolerância configurável conforme CLT)
-- Banco de horas mensal (saldo acumulado de extras e débitos)
+## Arquitetura
 
-### Relatórios
-- Espelho de ponto mensal por funcionário
-- Relatório geral de todos os funcionários
-- Detecção de inconsistências (registros incompletos ou fora do padrão)
-- Exportação em PDF e CSV
+- **Frontend**: HTML/CSS/JS vanilla em [`src/frontend/`](src/frontend/)
+- **Firebase SDK (compat)** carregado via CDN
+- **Realtime Database** armazena usuarios, registros, ajustes, abonos, perfis de horario, feriados, config
+- **Firebase Auth** (email/senha) — usuario digita `usuario`, internamente e convertido para `{usuario}@ccf.local`
+- **Storage** guarda atestados em `/atestados/{uid}/{arquivo}`
 
-### Justificativas e Ajustes
-- Solicitação de ajuste de ponto pelo funcionário
-- Aprovação/rejeição pelo administrador com justificativa
-- Registro de atestados médicos (com upload de arquivo)
-- Registro de faltas
+### Estrutura de dados (RTDB)
 
-### Configurações
-- Horário de trabalho por funcionário e dia da semana
-- Cadastro de feriados
-- Tolerância de atraso configurável (padrão: 10 minutos)
-
-## Stack
-
-- **Desktop:** Electron.js
-- **Backend:** Node.js + Express
-- **Frontend:** HTML/CSS/JS (SPA)
-- **Banco de Dados:** MySQL (TiDB Cloud)
-- **Autenticação:** JWT
-- **Relatórios:** PDFKit (PDF) + CSV
-
-## Pré-requisitos
-
-- [Node.js](https://nodejs.org/) v18 ou superior
-- Acesso ao banco MySQL (credenciais no `.env`)
-
-## Instalação
-
-```bash
-# Clonar o repositório
-git clone <url-do-repositorio>
-cd Registro-Ponto-CCF
-
-# Instalar dependências
-make install
-
-# Criar tabelas e usuário admin inicial
-make seed
-
-# Ou tudo de uma vez
-make setup
+```
+/users/{uid}               — perfil do colaborador
+/usuario_to_uid/{usuario}  — lookup rapido username -> uid
+/registros/{uid}/{id}      — registros de ponto (indexado por `data`)
+/ajustes/{id}              — solicitacoes de ajuste (indexado por funcionario_uid, status)
+/abonos/{id}               — abonos/atestados (indexado por funcionario_uid, status)
+/perfis_horario/{id}       — perfis de horario de trabalho
+/configuracoes_horario/{uid}/{diaSemana}
+/feriados/{id}
+/configuracoes/            — tolerancia_minutos etc
 ```
 
-## Uso
+---
+
+## Setup inicial (uma vez)
+
+### 1. Instalar Firebase CLI
 
 ```bash
-# Modo desenvolvimento (navegador em http://localhost:3131)
+make install          # instala firebase-tools localmente
+make login            # autentica no Firebase
+```
+
+### 2. Habilitar servicos no Firebase Console
+
+No projeto `registro-de-ponto-ccf`:
+
+1. **Authentication** > Sign-in method > habilitar "Email/Password"
+2. **Realtime Database** > criar (regiao `us-central1`) > modo bloqueado
+3. **Storage** > criar bucket padrao
+
+### 3. Publicar regras de seguranca
+
+```bash
+make deploy-rules
+```
+
+### 4. Criar o primeiro admin
+
+Como o sistema usa Firebase Auth, o primeiro admin precisa ser criado manualmente:
+
+1. Abra https://console.firebase.google.com/project/registro-de-ponto-ccf/authentication/users
+2. **Add user** com email `admin@ccf.local` e a senha que quiser
+3. Copie o **User UID** gerado
+4. Abra https://console.firebase.google.com/project/registro-de-ponto-ccf/database > **Data**
+5. Crie manualmente o no `/users/{UID_COPIADO}` com o seguinte JSON:
+
+```json
+{
+  "nome": "Administrador",
+  "usuario": "admin",
+  "email_login": "admin@ccf.local",
+  "role": "admin",
+  "ativo": true,
+  "senha_temporaria": false,
+  "jornada_semanal": 44
+}
+```
+
+6. Crie tambem `/usuario_to_uid/admin` com valor `"{UID_COPIADO}"` (string)
+
+Agora voce pode logar com `admin` + senha no app.
+
+### 5. Deploy do frontend
+
+```bash
+make deploy
+```
+
+---
+
+## Comandos
+
+| Comando            | O que faz |
+|--------------------|-----------|
+| `make install`     | Instala `firebase-tools` |
+| `make login`       | Login no Firebase CLI |
+| `make dev`         | Roda **emuladores locais** (Hosting :5000, Auth :9099, DB :9000, Storage :9199, UI :4000) |
+| `make serve`       | Serve hosting local conectado ao Firebase real |
+| `make deploy`      | Deploy completo (frontend + regras) |
+| `make deploy-hosting` | Deploy so do frontend |
+| `make deploy-rules`   | Deploy so das regras de seguranca |
+| `make release`     | Bump patch + commit + push + deploy |
+
+---
+
+## Desenvolvimento local
+
+**Opcao 1 — Emuladores (recomendado):**
+```bash
 make dev
-
-# Modo desktop (Electron)
-make start
 ```
+Abra http://localhost:5000. UI dos emuladores em http://localhost:4000.
 
-## Build
-
+**Opcao 2 — Frontend local + Firebase real:**
 ```bash
-# Gerar instalador Windows (.exe)
-make build-win
-
-# Gerar instalador macOS (.dmg)
-make build-mac
-
-# Ambos
-make build
+make serve
 ```
 
-Os instaladores serão gerados na pasta `dist/`.
+---
 
-## Configuração
+## Fluxos e regras
 
-Crie um arquivo `.env` na raiz do projeto:
+### Auth
+- Colaborador digita `usuario` + senha -> convertido para `{usuario}@ccf.local` internamente
+- Sessao persiste automaticamente
+- `senha_temporaria: true` abre modal de troca no primeiro login
 
-```env
-MYSQL_HOST=seu-host
-MYSQL_PORT=4000
-MYSQL_USER=seu-usuario
-MYSQL_PASSWORD=sua-senha
-MYSQL_DATABASE=seu-banco
-JWT_SECRET=sua-chave-secreta
-PORT=3131
-```
+### Cadastro de colaborador (admin)
+- Admin informa nome, usuario e senha inicial
+- Sistema cria Firebase Auth user via **app secundario** (nao desloga o admin)
+- Cria `/users/{novoUid}` e `/usuario_to_uid/{usuario}`
 
-## Login Inicial
+### Reset de senha
+- **Com email real cadastrado**: Firebase envia email de reset
+- **Sem email** (so @ccf.local): admin precisa **excluir e recriar** o colaborador (limitacao sem Admin SDK)
 
-| Campo | Valor |
-|-------|-------|
-| Email | `admin@ccf.com` |
-| Senha | `admin123` |
+### Registro de ponto
+- Trava de 1h de almoco
+- Offline: RTDB enfilera localmente e sincroniza sozinha ao voltar
 
-> Altere a senha do admin após o primeiro acesso.
+### Relatorios
+- Rodam no cliente sobre dados lidos da RTDB
+- Export CSV disponivel. PDF foi removido (dependia do backend).
 
-## Estrutura do Projeto
+---
 
-```
-├── main.js                        # Processo principal Electron
-├── seed.js                        # Criação de tabelas e admin
-├── Makefile                       # Comandos make
-├── src/
-│   ├── backend/
-│   │   ├── database.js            # Conexão MySQL + migrations
-│   │   ├── server.js              # Servidor Express
-│   │   ├── middleware/
-│   │   │   └── auth.js            # Autenticação JWT
-│   │   └── routes/
-│   │       ├── auth.js            # Login, logout, reset senha
-│   │       ├── funcionarios.js    # CRUD de funcionários
-│   │       ├── ponto.js           # Registro de ponto
-│   │       ├── horas.js           # Cálculos de horas
-│   │       ├── ajustes.js         # Ajustes, atestados, faltas
-│   │       ├── relatorios.js      # Espelho, relatórios, PDF/CSV
-│   │       └── configuracoes.js   # Horários, feriados, tolerância
-│   └── frontend/
-│       ├── index.html             # SPA principal
-│       ├── css/
-│       │   └── style.css
-│       └── js/
-│           ├── api.js             # Cliente HTTP
-│           └── app.js             # Lógica de interface
-└── uploads/                       # Arquivos de atestados
-```
+## Economia de recursos (free tier)
 
-## Banco de Dados
+- RTDB: queries estreitas com `orderByChild`/`startAt`/`endBefore`, cache em memoria
+- Storage: atestados limitados a 5 MB, apenas imagens/PDF
+- Hosting: cache de assets (1h js/css, 1 dia imagens)
+- Auth: ilimitado gratis
 
-Todas as tabelas são criadas com o prefixo `rp_` para não conflitar com tabelas existentes:
+Limites do plano Spark:
+- RTDB: 1 GB / 10 GB download mes
+- Storage: 5 GB / 1 GB dia download
+- Hosting: 10 GB mes
 
-| Tabela | Descrição |
-|--------|-----------|
-| `rp_funcionarios` | Cadastro de funcionários |
-| `rp_registros_ponto` | Registros de entrada/saída |
-| `rp_ajustes_ponto` | Solicitações de ajuste |
-| `rp_atestados` | Atestados médicos |
-| `rp_feriados` | Calendário de feriados |
-| `rp_configuracoes_horario` | Horários por funcionário/dia |
-| `rp_configuracoes` | Configurações gerais |
-| `rp_faltas` | Registro de faltas |
+Para CCF isso sobra.
 
-## Comandos Make
+---
 
-| Comando | Descrição |
-|---------|-----------|
-| `make help` | Lista todos os comandos disponíveis |
-| `make install` | Instala dependências |
-| `make setup` | Install + seed completo |
-| `make dev` | Servidor em modo desenvolvimento |
-| `make start` | Abre o app Electron |
-| `make seed` | Cria tabelas e admin |
-| `make build-win` | Build para Windows |
-| `make build-mac` | Build para macOS |
-| `make build` | Build para ambos |
-| `make clean` | Remove node_modules e dist |
+## Limitacoes sem Cloud Functions
 
-## Licença
+1. **Exclusao definitiva** remove da RTDB mas deixa usuario no Firebase Auth
+2. **Reset de senha sem email** nao funciona — excluir e recriar
+3. **Relatorios pesados** rodam no cliente (ok ate ~10k registros/mes)
+4. **PDF export** removido
+5. **Agregacoes** fazem varios reads paralelos (aceitavel ate ~100 funcionarios)
 
-Uso interno - CCF
+Upgrade para Blaze habilita Cloud Functions se necessario.
+
+---
+
+## Migracao da versao antiga (MySQL/Electron)
+
+Senhas bcrypt do MySQL nao migram para Firebase Auth. Caminho:
+
+1. Exportar funcionarios do MySQL
+2. Admin cria cada um com senha temporaria
+3. Cada colaborador troca senha no primeiro login
+4. Registros historicos podem ser importados via script Node
+
+---
+
+## Versao
+
+Frontend: v2.0.0 (Firebase)
+
+Versao anterior (Electron/MySQL) disponivel no historico git pre-migracao.

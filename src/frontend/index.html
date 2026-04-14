@@ -51,7 +51,7 @@
         </div>
         <div class="form-group">
           <label>Senha</label>
-          <input type="password" id="login-senha" class="form-control" placeholder="Sua senha" required autocomplete="current-password">
+          <div class="pwd-wrap"><input type="password" id="login-senha" class="form-control" placeholder="Sua senha" required autocomplete="current-password"><button type="button" class="pwd-toggle" data-target="login-senha" aria-label="Mostrar senha">👁</button></div>
         </div>
         <button type="submit" class="btn btn-primary" style="width:100%;padding:12px;margin-top:8px;font-size:16px;">Entrar</button>
       </form>
@@ -70,7 +70,7 @@
         <div class="nav-section">Principal</div>
         <a href="#" data-page="ponto" class="func-only active"><span class="icon">&#9201;</span> Registrar Ponto</a>
         <a href="#" data-page="dashboard"><span class="icon">&#128200;</span> Dashboard</a>
-        <a href="#" data-page="meu-espelho" class="func-only"><span class="icon">&#128196;</span> Meu Espelho</a>
+        <a href="#" data-page="meu-espelho" class="func-only"><span class="icon">&#128196;</span> Espelho de Ponto</a>
 
         <div class="nav-section" id="nav-admin-section">Administra&ccedil;&atilde;o</div>
         <a href="#" data-page="funcionarios" class="admin-only"><span class="icon">&#128101;</span> Colaboradores</a>
@@ -185,13 +185,12 @@
       <!-- MEU ESPELHO -->
       <div id="page-meu-espelho" class="page hidden">
         <div class="page-header">
-          <h1>Meu Espelho de Ponto</h1>
-          <div class="btn-group">
-            <select id="espelho-mes" class="form-control"></select>
-            <select id="espelho-ano" class="form-control"></select>
-            <button class="btn btn-primary" id="btn-gerar-espelho">Gerar</button>
-            <button class="btn btn-secondary" id="btn-exportar-pdf">PDF</button>
-            <button class="btn btn-secondary" id="btn-exportar-csv">CSV</button>
+          <h1>Espelho de Ponto</h1>
+          <div class="btn-group" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
+            <select id="espelho-mes" class="form-control" style="width:auto;min-width:130px;"></select>
+            <select id="espelho-ano" class="form-control" style="width:auto;min-width:90px;"></select>
+            <button class="btn btn-primary" id="btn-gerar-espelho">Pesquisar</button>
+            <button class="btn btn-secondary" id="btn-exportar-pdf">Relatório</button>
           </div>
         </div>
         <div class="page-body">
@@ -730,15 +729,15 @@
         <form id="form-trocar-senha">
           <div class="form-group">
             <label>Senha Atual (tempor&aacute;ria)</label>
-            <input type="password" id="troca-senha-atual" class="form-control" required placeholder="Digite a senha atual">
+            <div class="pwd-wrap"><input type="password" id="troca-senha-atual" class="form-control" required placeholder="Digite a senha atual"><button type="button" class="pwd-toggle" data-target="troca-senha-atual" aria-label="Mostrar senha">👁</button></div>
           </div>
           <div class="form-group">
             <label>Nova Senha</label>
-            <input type="password" id="troca-nova-senha" class="form-control" required placeholder="M&iacute;nimo 6 caracteres" minlength="6">
+            <div class="pwd-wrap"><input type="password" id="troca-nova-senha" class="form-control" required placeholder="M&iacute;nimo 6 caracteres" minlength="6"><button type="button" class="pwd-toggle" data-target="troca-nova-senha" aria-label="Mostrar senha">👁</button></div>
           </div>
           <div class="form-group">
             <label>Confirmar Nova Senha</label>
-            <input type="password" id="troca-confirmar-senha" class="form-control" required placeholder="Repita a nova senha" minlength="6">
+            <div class="pwd-wrap"><input type="password" id="troca-confirmar-senha" class="form-control" required placeholder="Repita a nova senha" minlength="6"><button type="button" class="pwd-toggle" data-target="troca-confirmar-senha" aria-label="Mostrar senha">👁</button></div>
           </div>
         </form>
       </div>
@@ -791,6 +790,12 @@
     </div>
   </div>
 
+  <!-- Firebase SDK (compat mode — sintaxe que combina com api.js) -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+  <script src="js/firebase-init.js"></script>
   <script src="js/offline.js"></script>
   <script src="js/api.js"></script>
   <script src="js/app.js"></script>

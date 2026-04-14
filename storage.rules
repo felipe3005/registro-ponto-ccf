@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Atestados: upload pelo proprio usuario, leitura por qualquer autenticado
+    // (admin precisa ver, e app interno nao expoe URLs publicas)
+    match /atestados/{uid}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.uid == uid
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*|application/pdf');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

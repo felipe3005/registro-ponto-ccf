@@ -1,0 +1,66 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+
+    "usuario_to_uid": {
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+
+    "users": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "role": {
+          ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+        }
+      }
+    },
+
+    "registros": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".indexOn": ["data"],
+        "$regId": {
+          ".validate": "newData.hasChildren(['tipo','data_hora','data'])"
+        }
+      }
+    },
+
+    "ajustes": {
+      ".read": "auth != null",
+      ".indexOn": ["funcionario_uid", "status"],
+      "$ajusteId": {
+        ".write": "auth != null && (!data.exists() ? newData.child('funcionario_uid').val() === auth.uid : root.child('users').child(auth.uid).child('role').val() === 'admin' || data.child('funcionario_uid').val() === auth.uid)"
+      }
+    },
+
+    "abonos": {
+      ".read": "auth != null",
+      ".indexOn": ["funcionario_uid", "status"],
+      "$abonoId": {
+        ".write": "auth != null && (!data.exists() ? newData.child('funcionario_uid').val() === auth.uid : root.child('users').child(auth.uid).child('role').val() === 'admin' || data.child('funcionario_uid').val() === auth.uid)"
+      }
+    },
+
+    "perfis_horario": {
+      ".read": "auth != null"
+    },
+
+    "configuracoes_horario": {
+      "$uid": {
+        ".read": "auth != null"
+      }
+    },
+
+    "feriados": {
+      ".read": "auth != null"
+    },
+
+    "configuracoes": {
+      ".read": "auth != null"
+    }
+  }
+}
