@@ -14,5 +14,8 @@
   },
   "devDependencies": {
     "firebase-tools": "^13.29.1"
+  },
+  "dependencies": {
+    "firebase-functions": "^7.2.5"
   }
 }

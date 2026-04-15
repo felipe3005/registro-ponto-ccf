@@ -54,7 +54,29 @@
           <div class="pwd-wrap"><input type="password" id="login-senha" class="form-control" placeholder="Sua senha" required autocomplete="current-password"><button type="button" class="pwd-toggle" data-target="login-senha" aria-label="Mostrar senha">👁</button></div>
         </div>
         <button type="submit" class="btn btn-primary" style="width:100%;padding:12px;margin-top:8px;font-size:16px;">Entrar</button>
+        <div style="text-align:center;margin-top:16px;"><a href="#" id="link-esqueci-senha" style="color:#0d2c64;font-size:14px;text-decoration:none;">Esqueci minha senha</a></div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL ESQUECI SENHA -->
+  <div class="modal-overlay" id="modal-esqueci-senha">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Redefinir senha</h3>
+        <button class="modal-close" onclick="closeModal('modal-esqueci-senha')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="font-size:14px;margin:0 0 16px;">Informe seu usu&aacute;rio. Se houver e-mail cadastrado, enviaremos um link para redefinir sua senha.</p>
+        <form id="form-esqueci-senha">
+          <div class="form-group">
+            <label>Usu&aacute;rio</label>
+            <input type="text" id="esqueci-usuario" class="form-control" placeholder="seu.usuario" required>
+          </div>
+          <button type="submit" class="btn btn-primary" id="btn-esqueci-enviar" style="width:100%;padding:12px;">Enviar link</button>
+        </form>
+        <div id="esqueci-resultado" style="margin-top:16px;"></div>
+      </div>
     </div>
   </div>
 
@@ -75,6 +97,7 @@
         <div class="nav-section" id="nav-admin-section">Administra&ccedil;&atilde;o</div>
         <a href="#" data-page="funcionarios" class="admin-only"><span class="icon">&#128101;</span> Colaboradores</a>
         <a href="#" data-page="ajustes-admin" class="admin-only"><span class="icon">&#9989;</span> Ajustes Pendentes</a>
+        <a href="#" data-page="horas-extras-admin" class="admin-only"><span class="icon">&#9203;</span> Horas Extras</a>
         <a href="#" data-page="abonos-admin" class="admin-only"><span class="icon">&#128203;</span> Abonos</a>
         <a href="#" data-page="relatorios" class="admin-only"><span class="icon">&#128202;</span> Relat&oacute;rios</a>
         <a href="#" data-page="inconsistencias" class="admin-only"><span class="icon">&#9888;</span> Inconsist&ecirc;ncias</a>
@@ -261,6 +284,23 @@
                   <tr><th>Colaborador</th><th>Data</th><th>Tipo</th><th>Nova Hora</th><th>Motivo</th><th>A&ccedil;&otilde;es</th></tr>
                 </thead>
                 <tbody id="ajustes-pendentes-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HORAS EXTRAS ADMIN -->
+      <div id="page-horas-extras-admin" class="page hidden">
+        <div class="page-header"><h1>Horas Extras Pendentes</h1></div>
+        <div class="page-body">
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr><th>Colaborador</th><th>Data</th><th>Minutos Extras</th><th>Solicitado em</th><th>A&ccedil;&otilde;es</th></tr>
+                </thead>
+                <tbody id="horas-extras-pendentes-body"></tbody>
               </table>
             </div>
           </div>
@@ -747,58 +787,16 @@
     </div>
   </div>
 
-  <!-- MODAL RESETAR SENHA (admin) -->
-  <div class="modal-overlay" id="modal-resetar-senha">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Resetar Senha</h3>
-        <button class="modal-close" onclick="closeModal('modal-resetar-senha')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p>Colaborador: <strong id="reset-func-nome"></strong></p>
-        <p class="text-muted">Usu&aacute;rio: <span id="reset-func-usuario"></span></p>
-        <div class="form-group" style="margin-top:12px;">
-          <label>Nova Senha (deixe vazio para gerar automaticamente)</label>
-          <input type="text" id="reset-nova-senha" class="form-control" placeholder="Gerar automaticamente">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('modal-resetar-senha')">Cancelar</button>
-        <button class="btn btn-primary" id="btn-confirmar-reset-senha">Resetar Senha</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL RESULTADO RESET SENHA -->
-  <div class="modal-overlay" id="modal-senha-gerada">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>&#9989; Senha Resetada</h3>
-        <button class="modal-close" onclick="closeModal('modal-senha-gerada')">&times;</button>
-      </div>
-      <div class="modal-body" style="text-align:center;">
-        <p>Comunique os dados abaixo ao colaborador:</p>
-        <div style="background:var(--gray-100);padding:16px;border-radius:8px;margin:12px 0;">
-          <p><strong>Usu&aacute;rio:</strong> <span id="gerada-usuario" style="font-family:monospace;font-size:16px;"></span></p>
-          <p style="margin-top:8px;"><strong>Nova Senha:</strong> <span id="gerada-senha" style="font-family:monospace;font-size:16px;color:var(--danger);"></span></p>
-        </div>
-        <p class="text-muted" style="font-size:12px;">O colaborador dever&aacute; trocar a senha no pr&oacute;ximo login.</p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" onclick="closeModal('modal-senha-gerada')" style="width:100%;">Entendido</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Firebase SDK (compat mode — sintaxe que combina com api.js) -->
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-functions-compat.js"></script>
   <script src="/__/firebase/init.js"></script>
   <script src="js/firebase-init.js"></script>
   <script src="js/offline.js"></script>
   <script src="js/api.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=<?= Date.now() ?>"></script>
 </body>
 </html>

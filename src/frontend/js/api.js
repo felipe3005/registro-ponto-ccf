@@ -6,8 +6,27 @@
 //  - .once() ao invés de .on() sempre que possível
 //  - Offline automático via RTDB local cache
 
-function _now() { return new Date().toISOString().slice(0, 19).replace('T', ' '); }
-function _today() { return new Date().toISOString().slice(0, 10); }
+// Datas em horario LOCAL (evita bug de UTC mostrando +3h no Brasil)
+function _pad(n) { return String(n).padStart(2, '0'); }
+function _now() {
+  const d = new Date();
+  return `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getDate())} ${_pad(d.getHours())}:${_pad(d.getMinutes())}:${_pad(d.getSeconds())}`;
+}
+function _today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getDate())}`;
+}
+function _nowIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getDate())}T${_pad(d.getHours())}:${_pad(d.getMinutes())}:${_pad(d.getSeconds())}`;
+}
+// Extrai HH:MM de uma string data_hora gravada (suporta ISO com Z herdado e ISO local novo)
+function _hhmm(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso.slice(11, 16);
+  return `${_pad(d.getHours())}:${_pad(d.getMinutes())}`;
+}
 function _monthRange(mes, ano) {
   const m = String(mes).padStart(2, '0');
   const start = ano + '-' + m + '-01';
@@ -372,16 +391,16 @@ class Api {
       }
     }
 
-    const now = new Date();
+    const dataHoraLocal = _nowIso();
     const ref = fbDb.ref('registros/' + uid).push();
     await ref.set({
       tipo: proximoTipo,
-      data_hora: now.toISOString(),
+      data_hora: dataHoraLocal,
       data: hoje,
       ip_origem: 'web',
-      created_at: now.toISOString()
+      created_at: dataHoraLocal
     });
-    return { message: proximoTipo.replace('_', ' ') + ' registrada com sucesso', tipo: proximoTipo, data_hora: now.toISOString() };
+    return { message: proximoTipo.replace('_', ' ') + ' registrada com sucesso', tipo: proximoTipo, data_hora: dataHoraLocal };
   }
 
   async sincronizarPonto(registros) {
@@ -444,52 +463,118 @@ class Api {
 
   async bancoHoras(mes, ano, funcionarioId) {
     const uid = funcionarioId || this._currentUid;
+    mes = parseInt(mes, 10);
+    ano = parseInt(ano, 10);
     const regs = await this._registrosMes(uid, mes, ano);
     const porDia = {};
     regs.forEach(r => {
       if (!porDia[r.data]) porDia[r.data] = {};
       porDia[r.data][r.tipo] = r.data_hora;
     });
+    const userData = await this._loadUser(uid);
+    const jornadaSemanal = (userData && userData.jornada_semanal) || 44;
+    const jornadaDiariaMin = Math.round((jornadaSemanal / 5) * 60);
+
+    // Feriados e horas extras aprovadas
+    const [feriadosSnap, heSnap] = await Promise.all([
+      fbDb.ref('feriados').once('value'),
+      fbDb.ref('horas_extras').orderByChild('funcionario_uid').equalTo(uid).once('value')
+    ]);
+    const feriadosMap = {};
+    feriadosSnap.forEach(c => { const v = c.val(); if (v && v.data) feriadosMap[v.data] = true; });
+    const heAprovadasMap = {};
+    heSnap.forEach(c => { const v = c.val(); if (v && v.status === 'aprovado' && v.data) heAprovadasMap[v.data] = true; });
+
+    // Saldo = soma de (deficits sempre) + (extras so se aprovadas)
+    const diasNoMes = new Date(ano, mes, 0).getDate();
+    let saldoMin = 0;
     let totalMin = 0;
     const dias = [];
-    Object.keys(porDia).sort().forEach(d => {
-      const t = porDia[d];
+    for (let d = 1; d <= diasNoMes; d++) {
+      const dataStr = `${ano}-${String(mes).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dow = new Date(ano, mes - 1, d).getDay();
+      if (dow === 0 || dow === 6 || feriadosMap[dataStr]) continue;
+      const t = porDia[dataStr] || {};
       let min = 0;
       if (t.entrada && t.saida) {
         min = Math.floor((new Date(t.saida) - new Date(t.entrada)) / 60000);
-        if (t.saida_almoco && t.retorno_almoco) {
-          min -= Math.floor((new Date(t.retorno_almoco) - new Date(t.saida_almoco)) / 60000);
-        }
+        if (t.saida_almoco && t.retorno_almoco) min -= Math.floor((new Date(t.retorno_almoco) - new Date(t.saida_almoco)) / 60000);
       }
-      totalMin += Math.max(0, min);
-      dias.push({ data: d, minutos: Math.max(0, min) });
-    });
-
-    // Esperado = (jornada_semanal/5) * dias uteis (seg-sex) do mes
-    const userData = await this._loadUser(uid);
-    const jornadaSemanal = (userData && userData.jornada_semanal) || 44;
-    const diasNoMes = new Date(ano, mes, 0).getDate();
-    let diasUteis = 0;
-    for (let d = 1; d <= diasNoMes; d++) {
-      const dow = new Date(ano, mes - 1, d).getDay();
-      if (dow >= 1 && dow <= 5) diasUteis++;
+      min = Math.max(0, min);
+      totalMin += min;
+      const diff = min - jornadaDiariaMin;
+      if (diff < 0) saldoMin += diff;
+      else if (diff > 0 && heAprovadasMap[dataStr]) saldoMin += diff;
+      dias.push({ data: dataStr, minutos: min, diffMinutos: diff });
     }
-    const esperadoMin = Math.round((jornadaSemanal / 5) * diasUteis * 60);
-    const saldoMin = totalMin - esperadoMin;
+
     const saldoAbs = Math.abs(saldoMin);
-    const hh = Math.floor(saldoAbs / 60);
-    const mm = saldoAbs % 60;
-    const saldoFormatado = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    const saldoFormatado = `${String(Math.floor(saldoAbs/60)).padStart(2,'0')}:${String(saldoAbs%60).padStart(2,'0')}`;
 
     return {
       totalMinutos: totalMin,
       totalHoras: (totalMin / 60).toFixed(2),
-      esperadoMinutos: esperadoMin,
       saldoMinutos: saldoMin,
       saldoPositivo: saldoMin >= 0,
       saldoFormatado,
       dias
     };
+  }
+
+  // ==================== HORAS EXTRAS ====================
+  async solicitarHorasExtras(data) {
+    const uid = this._currentUid;
+    // Verifica se ja existe
+    const existSnap = await fbDb.ref('horas_extras').orderByChild('funcionario_uid').equalTo(uid).once('value');
+    let jaExiste = null;
+    existSnap.forEach(c => { const v = c.val(); if (v.data === data) jaExiste = c.key; });
+    if (jaExiste) throw new Error('Solicitação já existe para este dia');
+
+    // Calcula minutos extras a partir dos registros do dia
+    const dayRegs = await this._ultimosRegistrosDia(uid, data);
+    const t = {};
+    dayRegs.forEach(r => { t[r.tipo] = r.data_hora; });
+    let min = 0;
+    if (t.entrada && t.saida) {
+      min = Math.floor((new Date(t.saida) - new Date(t.entrada)) / 60000);
+      if (t.saida_almoco && t.retorno_almoco) min -= Math.floor((new Date(t.retorno_almoco) - new Date(t.saida_almoco)) / 60000);
+    }
+    const userData = this._currentUserData || await this._loadUser(uid);
+    const jornadaDiariaMin = Math.round(((userData?.jornada_semanal || 44) / 5) * 60);
+    const minutosExtras = min - jornadaDiariaMin;
+    if (minutosExtras <= 0) throw new Error('Não há horas extras neste dia');
+
+    const ref = fbDb.ref('horas_extras').push();
+    await ref.set({
+      funcionario_uid: uid,
+      funcionario_nome: userData?.nome || null,
+      data,
+      minutos_extras: minutosExtras,
+      status: 'pendente',
+      created_at: _now()
+    });
+    return { id: ref.key, message: 'Solicitação de horas extras enviada' };
+  }
+
+  async horasExtrasPendentes() {
+    await this._requireAdmin();
+    const snap = await fbDb.ref('horas_extras').orderByChild('status').equalTo('pendente').once('value');
+    const arr = [];
+    snap.forEach(c => { const v = c.val(); v.id = c.key; arr.push(v); });
+    arr.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+    return arr;
+  }
+
+  async aprovarHorasExtras(id) {
+    await this._requireAdmin();
+    await fbDb.ref('horas_extras/' + id).update({ status: 'aprovado', admin_uid: this._currentUid, aprovado_em: _now() });
+    return { message: 'Horas extras aprovadas' };
+  }
+
+  async rejeitarHorasExtras(id, motivo) {
+    await this._requireAdmin();
+    await fbDb.ref('horas_extras/' + id).update({ status: 'rejeitado', admin_uid: this._currentUid, motivo_rejeicao: motivo || '', rejeitado_em: _now() });
+    return { message: 'Horas extras rejeitadas' };
   }
 
   // ==================== AJUSTES ====================
@@ -725,6 +810,11 @@ class Api {
     const feriadosMap = {};
     feriadosSnap.forEach(c => { const v = c.val(); if (v && v.data) feriadosMap[v.data] = v.descricao || v.nome || 'Feriado'; });
 
+    // Solicitacoes de horas extras do colaborador (por data)
+    const heSnap = await fbDb.ref('horas_extras').orderByChild('funcionario_uid').equalTo(uid).once('value');
+    const heMap = {};
+    heSnap.forEach(c => { const v = c.val(); v.id = c.key; if (v.data) heMap[v.data] = v; });
+
     const fmt = (m) => {
       const abs = Math.abs(m);
       return `${String(Math.floor(abs/60)).padStart(2,'0')}:${String(abs%60).padStart(2,'0')}`;
@@ -749,31 +839,38 @@ class Api {
 
       let status;
       const feriadoNome = feriadosMap[dataStr];
+      const diff = min - jornadaDiariaMin;
+      const he = heMap[dataStr] || null;
       if (feriadoNome) status = 'feriado';
       else if (dow === 0 || dow === 6) status = 'fim_de_semana';
       else if (min === 0) status = 'falta';
-      else if (min < jornadaDiariaMin) status = 'incompleto';
-      else status = 'ok';
+      else if (diff < 0) status = 'incompleto';
+      else if (diff > 0) status = 'extras';
+      else status = 'completa';
 
       totalTrabMin += min;
       if (status !== 'feriado' && status !== 'fim_de_semana') {
         diasUteis++;
-        const diff = min - jornadaDiariaMin;
-        if (diff > 0) totalExtrasMin += diff;
         if (status === 'falta') totalFaltasMin += jornadaDiariaMin;
+        if (diff > 0 && he && he.status === 'aprovado') totalExtrasMin += diff;
       }
 
       dias.push({
         data: dataStr,
         diaSemana: diasSemana[dow],
-        entrada: t.entrada ? t.entrada.slice(11,16) : null,
-        saida_almoco: t.saida_almoco ? t.saida_almoco.slice(11,16) : null,
-        retorno_almoco: t.retorno_almoco ? t.retorno_almoco.slice(11,16) : null,
-        saida: t.saida ? t.saida.slice(11,16) : null,
+        entrada: _hhmm(t.entrada),
+        saida_almoco: _hhmm(t.saida_almoco),
+        retorno_almoco: _hhmm(t.retorno_almoco),
+        saida: _hhmm(t.saida),
         totalMinutos: min,
         trabalhado: fmt(min),
         status,
-        feriado: feriadoNome || null
+        feriado: feriadoNome || null,
+        diffMinutos: diff,
+        diffFormatado: fmt(diff),
+        extrasStatus: he ? he.status : null,
+        extrasId: he ? he.id : null,
+        extrasMotivoRejeicao: he ? (he.motivo_rejeicao || null) : null
       });
     }
 
@@ -849,7 +946,7 @@ class Api {
       if (r.length > 0) {
         presentesSet.add(f.id);
         registrosPorFunc[f.id] = { nome: f.nome, cargo: f.cargo, departamento: f.departamento, registros: {} };
-        r.forEach(reg => { registrosPorFunc[f.id].registros[reg.tipo] = reg.data_hora.slice(11, 16); });
+        r.forEach(reg => { registrosPorFunc[f.id].registros[reg.tipo] = _hhmm(reg.data_hora); });
       }
     });
 

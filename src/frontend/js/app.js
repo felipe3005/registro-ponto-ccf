@@ -46,6 +46,41 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==================== AUTH ====================
 let pendingPasswordChange = null; // guarda senha temporaria para troca
 
+// Esqueci minha senha
+document.getElementById('link-esqueci-senha').addEventListener('click', (e) => {
+  e.preventDefault();
+  document.getElementById('esqueci-usuario').value = document.getElementById('login-usuario').value.trim();
+  document.getElementById('esqueci-resultado').innerHTML = '';
+  document.getElementById('btn-esqueci-enviar').disabled = false;
+  document.getElementById('btn-esqueci-enviar').textContent = 'Enviar link';
+  openModal('modal-esqueci-senha');
+});
+
+document.getElementById('form-esqueci-senha').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const usuario = document.getElementById('esqueci-usuario').value.trim().toLowerCase();
+  const resultadoEl = document.getElementById('esqueci-resultado');
+  const btn = document.getElementById('btn-esqueci-enviar');
+  if (!usuario) return;
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+  resultadoEl.innerHTML = '';
+  try {
+    const fn = firebase.app().functions('us-central1').httpsCallable('solicitarResetSenha');
+    const res = await fn({ usuario });
+    const d = res.data || {};
+    const msg = d.emailMascara
+      ? `✓ Link enviado para <strong>${d.emailMascara}</strong>. Verifique sua caixa de entrada e spam. O link expira em 30 minutos.`
+      : (d.message || 'Se o usuário existir e tiver e-mail cadastrado, um link foi enviado.');
+    resultadoEl.innerHTML = `<div style="background:#e7f5ea;color:#1e5a2b;padding:12px;border-radius:6px;font-size:13px;border-left:4px solid #2e7d32;">${msg}</div>`;
+    btn.textContent = 'Enviado';
+  } catch (err) {
+    resultadoEl.innerHTML = `<div style="background:#fdecea;color:#a02622;padding:12px;border-radius:6px;font-size:13px;border-left:4px solid #d32f2f;">${(err && err.message) || 'Erro ao solicitar redefinição.'}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Enviar link';
+  }
+});
+
 document.getElementById('form-login').addEventListener('submit', async (e) => {
   e.preventDefault();
   const usuario = document.getElementById('login-usuario').value.trim().toLowerCase();
@@ -208,6 +243,7 @@ function navigateTo(page) {
     case 'meu-espelho': loadEspelho(); break;
     case 'funcionarios': loadFuncionarios(); break;
     case 'ajustes-admin': loadAjustesPendentes(); break;
+    case 'horas-extras-admin': loadHorasExtrasPendentes(); break;
     case 'relatorios': break;
     case 'inconsistencias': break;
     case 'configuracoes': loadConfiguracoes(); break;
@@ -536,7 +572,7 @@ async function loadRegistrosPonto() {
   if (OfflineManager.isOnline()) {
     try {
       const data = await api.ultimoRegistro();
-
+console.log('Último registro do servidor:', data);
       // Merge: tipos do servidor + tipos da fila offline
       const tiposRegistrados = [];
       if (data.ultimoRegistro) {
@@ -552,7 +588,7 @@ async function loadRegistrosPonto() {
       if (tiposRegistrados.length === 0) {
         proximoTipo = 'entrada';
       } else {
-        const ultimoTipo = tiposRegistrados[tiposRegistrados.length - 1];
+        const ultimoTipo = tiposRegistrados[tiposRegistrados.length - 2];
         const idx = ORDEM_TIPOS.indexOf(ultimoTipo);
         proximoTipo = idx < ORDEM_TIPOS.length - 1 ? ORDEM_TIPOS[idx + 1] : null;
       }
@@ -663,9 +699,21 @@ document.getElementById('btn-registrar-ponto').addEventListener('click', async (
   const agora = new Date();
 
   // Determinar próximo tipo baseado na fila offline + dados cacheados
-  let registrosHojeTipos = [];
-  const offlineHoje = OfflineManager.getQueueForDate(hoje);
-  registrosHojeTipos = offlineHoje.map(r => r.tipo);
+  //let registrosHojeTipos = [];
+// 🔹 Buscar servidor + offline juntos
+const registrosServidor = await api.registrosDia(hoje);
+const offlineHoje = OfflineManager.getQueueForDate(hoje) || [];
+
+const registrosHoje = [...registrosServidor];
+
+offlineHoje.forEach(offReg => {
+  const exists = registrosHoje.some(r => r.tipo === offReg.tipo);
+  if (!exists) {
+    registrosHoje.push(offReg);
+  }
+});
+
+const registrosHojeTipos = registrosHoje.map(r => r.tipo);
 
   let proximoTipo;
   if (registrosHojeTipos.length === 0) {
@@ -750,11 +798,35 @@ async function loadEspelho(funcionarioId) {
 
     const diasSemana = { 'Sun': 'Dom', 'Mon': 'Seg', 'Tue': 'Ter', 'Wed': 'Qua', 'Thu': 'Qui', 'Fri': 'Sex', 'Sat': 'Sáb' };
 
+    const isAdmin = currentUser && currentUser.role === 'admin';
+    const isOwnEspelho = !funcId || funcId === currentUser.id;
+
     document.getElementById('espelho-body').innerHTML = data.dias.map(d => {
-      const statusBadge = getStatusBadge(d.status);
       const dataFormatada = d.data.split('-').reverse().join('/');
       const dia = new Date(d.data + 'T12:00:00');
       const diaSemana = diasSemana[dia.toLocaleDateString('en', { weekday: 'short' })] || d.diaSemana;
+
+      let statusCell = '';
+      if (d.status === 'feriado') statusCell = `<span class="badge badge-info">🌴 Feriado</span>${d.feriado ? ` <small>(${d.feriado})</small>` : ''}`;
+      else if (d.status === 'fim_de_semana') statusCell = `<span class="badge badge-gray">☀️ Fim de semana</span>`;
+      else if (d.status === 'falta') statusCell = `<span class="badge badge-danger">Falta</span>`;
+      else if (d.status === 'incompleto') statusCell = `<span class="badge badge-warning">Jornada incompleta: ${d.diffFormatado}${d.diffFormatado.startsWith('00:') ? 'm' : 'h'}</span>`;
+      else if (d.status === 'completa') statusCell = `<span class="badge badge-success">Jornada Concluída</span>`;
+      else if (d.status === 'extras') {
+        const extrasLabel = `<span class="badge badge-success">Jornada Completa: +${d.diffFormatado}${d.diffFormatado.startsWith('00:') ? 'm' : 'h'}</span>`;
+        let acao = '';
+        if (d.extrasStatus === 'aprovado') acao = ` <span class="badge badge-info">Aprovado</span>`;
+        else if (d.extrasStatus === 'pendente') {
+          acao = ` <span class="badge badge-warning">Pendente</span>`;
+          if (isAdmin && !isOwnEspelho) {
+            acao += ` <button class="btn btn-xs btn-success" onclick="aprovarHorasExtras('${d.extrasId}')">Aprovar</button>`;
+            acao += ` <button class="btn btn-xs btn-danger" onclick="rejeitarHorasExtras('${d.extrasId}')">Rejeitar</button>`;
+          }
+        }
+        else if (d.extrasStatus === 'rejeitado') acao = ` <span class="badge badge-danger" title="${d.extrasMotivoRejeicao || ''}">Rejeitado</span>`;
+        else if (isOwnEspelho && !isAdmin) acao = ` <button class="btn btn-xs btn-primary" onclick="solicitarHorasExtras('${d.data}')">Aprovar</button>`;
+        statusCell = extrasLabel + acao;
+      }
 
       return `<tr class="${d.status === 'fim_de_semana' || d.status === 'feriado' ? 'text-muted' : ''}">
         <td>${dataFormatada}</td>
@@ -764,7 +836,7 @@ async function loadEspelho(funcionarioId) {
         <td>${d.retorno_almoco || '-'}</td>
         <td>${d.saida || '-'}</td>
         <td><strong>${d.trabalhado}</strong></td>
-        <td>${statusBadge}${d.feriado ? ` <small>(${d.feriado})</small>` : ''}</td>
+        <td>${statusCell}</td>
       </tr>`;
     }).join('');
 
@@ -822,7 +894,7 @@ async function loadFuncionarios() {
         <td>
           <div class="btn-group">
             <button class="btn btn-sm btn-secondary" onclick="editarFuncionario('${f.id}')">Editar</button>
-            <button class="btn btn-sm btn-warning" onclick="resetarSenhaFuncionario('${f.id}', '${f.nome.replace(/'/g, "\\'")}', '${(f.usuario || '').replace(/'/g, "\\'")}')">Resetar Senha</button>
+            <button class="btn btn-sm btn-warning" onclick="enviarResetSenha('${(f.usuario || '').replace(/'/g, "\\'")}', '${f.nome.replace(/'/g, "\\'")}')">Resetar Senha</button>
             ${f.ativo ?
               `<button class="btn btn-sm btn-danger" onclick="desativarFuncionario('${f.id}')">Desativar</button>` :
               `<button class="btn btn-sm btn-success" onclick="reativarFuncionario('${f.id}')">Reativar</button>`
@@ -973,38 +1045,26 @@ async function excluirFuncionarioDefinitivo(id, nome) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
-// Resetar senha de funcionário
-let resetFuncId = null;
-function resetarSenhaFuncionario(id, nome, usuario) {
-  resetFuncId = id;
-  document.getElementById('reset-func-nome').textContent = nome;
-  document.getElementById('reset-func-usuario').textContent = usuario;
-  document.getElementById('reset-nova-senha').value = '';
-  openModal('modal-resetar-senha');
-}
-
-document.getElementById('btn-confirmar-reset-senha').addEventListener('click', async () => {
-  if (!resetFuncId) return;
-  const novaSenha = document.getElementById('reset-nova-senha').value.trim();
-
-  try {
-    const result = await api.resetarSenha(resetFuncId, novaSenha || null);
-    closeModal('modal-resetar-senha');
-
-    // Mostrar modal com resultado
-    document.getElementById('gerada-usuario').textContent = result.usuario;
-    document.getElementById('gerada-senha').textContent = result.novaSenha;
-    openModal('modal-senha-gerada');
-
-    resetFuncId = null;
-  } catch (err) {
-    toast(err.message, 'error');
-  }
-});
-
 function verEspelho(funcionarioId) {
   navigateTo('meu-espelho');
   setTimeout(() => loadEspelho(funcionarioId), 100);
+}
+
+async function enviarResetSenha(usuario, nome) {
+  if (!usuario) { toast('Colaborador sem usuário definido', 'error'); return; }
+  if (!confirm(`Enviar link de redefinição de senha para ${nome}?\nO link será enviado ao e-mail cadastrado e expira em 30 minutos.`)) return;
+  try {
+    const fn = firebase.app().functions('us-central1').httpsCallable('solicitarResetSenha');
+    const res = await fn({ usuario });
+    const d = res.data || {};
+    if (d.emailMascara) {
+      toast(`Link enviado para ${d.emailMascara}`, 'success');
+    } else {
+      toast(d.message || 'Se o usuário tiver e-mail cadastrado, um link foi enviado.', 'info');
+    }
+  } catch (err) {
+    toast((err && err.message) || 'Erro ao enviar link de reset', 'error');
+  }
 }
 
 // ==================== AJUSTES ====================
@@ -1065,6 +1125,55 @@ async function loadAjustesPendentes() {
         </td>
       </tr>
     `).join('') || '<tr><td colspan="6" class="text-center text-muted">Nenhum ajuste pendente</td></tr>';
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function loadHorasExtrasPendentes() {
+  try {
+    const arr = await api.horasExtrasPendentes();
+    const fmt = (m) => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+    document.getElementById('horas-extras-pendentes-body').innerHTML = arr.map(h => `
+      <tr>
+        <td>${h.funcionario_nome || h.funcionario_uid}</td>
+        <td>${(h.data || '').split('-').reverse().join('/')}</td>
+        <td><strong>+${fmt(h.minutos_extras || 0)}</strong></td>
+        <td>${(h.created_at || '').slice(0, 16).replace('T', ' ')}</td>
+        <td>
+          <button class="btn btn-sm btn-success" onclick="aprovarHorasExtras('${h.id}')">Aprovar</button>
+          <button class="btn btn-sm btn-danger" onclick="rejeitarHorasExtras('${h.id}')">Rejeitar</button>
+        </td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" class="text-center text-muted">Nenhuma solicitação pendente</td></tr>';
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function solicitarHorasExtras(data) {
+  if (!confirm('Solicitar aprovação das horas extras deste dia?')) return;
+  try {
+    await api.solicitarHorasExtras(data);
+    toast('Solicitação enviada ao administrador', 'success');
+    loadEspelho();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function aprovarHorasExtras(id) {
+  if (!confirm('Aprovar estas horas extras?')) return;
+  try {
+    await api.aprovarHorasExtras(id);
+    toast('Horas extras aprovadas', 'success');
+    if (typeof loadHorasExtrasPendentes === 'function') loadHorasExtrasPendentes();
+    if (document.getElementById('espelho-body')) loadEspelho();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function rejeitarHorasExtras(id) {
+  const motivo = prompt('Motivo da rejeição:');
+  if (motivo === null) return;
+  try {
+    await api.rejeitarHorasExtras(id, motivo);
+    toast('Horas extras rejeitadas', 'success');
+    if (typeof loadHorasExtrasPendentes === 'function') loadHorasExtrasPendentes();
+    if (document.getElementById('espelho-body')) loadEspelho();
   } catch (err) { toast(err.message, 'error'); }
 }
 

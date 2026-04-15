@@ -45,6 +45,14 @@
       }
     },
 
+    "horas_extras": {
+      ".read": "auth != null",
+      ".indexOn": ["funcionario_uid", "status", "data"],
+      "$id": {
+        ".write": "auth != null && (!data.exists() ? newData.child('funcionario_uid').val() === auth.uid : root.child('users').child(auth.uid).child('role').val() === 'admin' || data.child('funcionario_uid').val() === auth.uid)"
+      }
+    },
+
     "perfis_horario": {
       ".read": "auth != null"
     },
