@@ -8,7 +8,7 @@ admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 5 });
 
 const SMTP_USER = 'noreply@creditocasafinanciamentos.com.br';
-const SMTP_PASS = 'hiqj xfzr ycum fmbu';
+const SMTP_PASS = '';
 const APP_URL = 'https://registro-de-ponto-ccf.web.app';
 const TOKEN_TTL_MIN = 30;
 
