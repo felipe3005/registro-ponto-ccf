@@ -1,5 +1,8 @@
+'use strict';
+
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
+const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
@@ -7,17 +10,24 @@ const crypto = require('crypto');
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 5 });
 
+// Senha armazenada no Google Cloud Secret Manager — nunca no código-fonte
+const SMTP_PASS_SECRET = defineSecret('SMTP_PASS');
+
 const SMTP_USER = 'noreply@creditocasafinanciamentos.com.br';
-const SMTP_PASS = '';
-const APP_URL = 'https://registro-de-ponto-ccf.web.app';
+const APP_URL   = 'https://registro-de-ponto-ccf.web.app';
 const TOKEN_TTL_MIN = 30;
+
+const ALLOWED_ORIGINS = [
+  'https://registro-de-ponto-ccf.web.app',
+  'https://registro-de-ponto-ccf.firebaseapp.com'
+];
 
 function transport() {
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 587,
     secure: false,
-    auth: { user: SMTP_USER, pass: SMTP_PASS }
+    auth: { user: SMTP_USER, pass: SMTP_PASS_SECRET.value() }
   });
 }
 
@@ -74,77 +84,88 @@ function htmlEmail(nome, link, expira) {
 </body></html>`;
 }
 
-// Solicita reset: usuario -> envia email se cadastrado
-exports.solicitarResetSenha = onCall(async (req) => {
-  const usuario = (req.data?.usuario || '').toLowerCase().trim();
-  if (!usuario) throw new HttpsError('invalid-argument', 'Usuário obrigatório');
+// ─── Solicita reset: usuario → envia e-mail se cadastrado ─────────────────────
+exports.solicitarResetSenha = onCall(
+  { secrets: [SMTP_PASS_SECRET], cors: ALLOWED_ORIGINS },
+  async (req) => {
+    const usuario = (req.data.usuario || '').toLowerCase().trim();
+    if (!usuario) throw new HttpsError('invalid-argument', 'Usuário obrigatório');
 
-  const db = admin.database();
-  // Codifica chave igual ao client (replace . por ,)
-  const key = usuario.replace(/\./g, ',').replace(/#/g, '%23').replace(/\$/g, '%24').replace(/\[/g, '%5B').replace(/\]/g, '%5D').replace(/\//g, '%2F');
-  const uidSnap = await db.ref('usuario_to_uid/' + key).once('value');
-  const uid = uidSnap.val();
-  // Por seguranca nao revelamos se o usuario existe
-  const RESP_GENERICA = { ok: true, message: 'Se o usuário existir e tiver e-mail cadastrado, um link foi enviado.' };
-  if (!uid) return RESP_GENERICA;
+    const db = admin.database();
+    const key = usuario.replace(/\./g, ',').replace(/#/g, '%23').replace(/\$/g, '%24').replace(/\[/g, '%5B').replace(/\]/g, '%5D').replace(/\//g, '%2F');
+    const uidSnap = await db.ref('usuario_to_uid/' + key).once('value');
+    const uid = uidSnap.val();
 
-  const userSnap = await db.ref('users/' + uid).once('value');
-  const userData = userSnap.val();
-  if (!userData || !userData.email) return RESP_GENERICA;
+    const RESP_GENERICA = { ok: true, message: 'Se o usuário existir e tiver e-mail cadastrado, um link foi enviado.' };
+    if (!uid) return RESP_GENERICA;
 
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = Date.now() + TOKEN_TTL_MIN * 60 * 1000;
-  await db.ref('password_resets/' + token).set({
-    uid,
-    usuario,
-    email: userData.email,
-    expires_at: expiresAt,
-    used: false,
-    created_at: Date.now()
-  });
+    const userSnap = await db.ref('users/' + uid).once('value');
+    const userData = userSnap.val();
+    if (!userData || !userData.email) return RESP_GENERICA;
 
-  const link = `${APP_URL}/reset-senha.html?token=${token}`;
-  await transport().sendMail({
-    from: `"Ponto Digital CCF" <${SMTP_USER}>`,
-    to: userData.email,
-    subject: 'Redefinição de senha — Ponto Digital CCF',
-    html: htmlEmail(userData.nome, link, `${TOKEN_TTL_MIN} minutos`)
-  });
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = Date.now() + TOKEN_TTL_MIN * 60 * 1000;
+    await db.ref('password_resets/' + token).set({
+      uid, usuario, email: userData.email,
+      expires_at: expiresAt, used: false, created_at: Date.now()
+    });
 
-  return { ok: true, emailMascara: maskEmail(userData.email), message: `E-mail enviado para ${maskEmail(userData.email)}` };
-});
+    const link = `${APP_URL}/reset-senha.html?token=${token}`;
+    try {
+      await transport().sendMail({
+        from: `"Ponto Digital CCF" <${SMTP_USER}>`,
+        to: userData.email,
+        subject: 'Redefinição de senha — Ponto Digital CCF',
+        html: htmlEmail(userData.nome, link, `${TOKEN_TTL_MIN} minutos`)
+      });
+    } catch (e) {
+      console.error('Falha ao enviar e-mail de reset:', e);
+      throw new HttpsError('internal', 'Não foi possível enviar o e-mail. Tente novamente mais tarde.');
+    }
 
-// Valida token
-exports.validarTokenReset = onCall(async (req) => {
-  const token = (req.data?.token || '').trim();
-  if (!token) throw new HttpsError('invalid-argument', 'Token obrigatório');
-  const db = admin.database();
-  const snap = await db.ref('password_resets/' + token).once('value');
-  const r = snap.val();
-  if (!r) throw new HttpsError('not-found', 'Link inválido');
-  if (r.used) throw new HttpsError('failed-precondition', 'Este link já foi usado');
-  if (Date.now() > r.expires_at) throw new HttpsError('failed-precondition', 'Link expirado');
-  return { valido: true, usuario: r.usuario };
-});
+    return { ok: true, emailMascara: maskEmail(userData.email), message: `E-mail enviado para ${maskEmail(userData.email)}` };
+  }
+);
 
-// Aplica nova senha
-exports.aplicarResetSenha = onCall(async (req) => {
-  const token = (req.data?.token || '').trim();
-  const novaSenha = req.data?.novaSenha || '';
-  if (!token) throw new HttpsError('invalid-argument', 'Token obrigatório');
-  if (!novaSenha || novaSenha.length < 6) throw new HttpsError('invalid-argument', 'Senha deve ter pelo menos 6 caracteres');
+// ─── Valida token ─────────────────────────────────────────────────────────────
+exports.validarTokenReset = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (req) => {
+    const token = (req.data.token || '').trim();
+    if (!token) throw new HttpsError('invalid-argument', 'Token obrigatório');
 
-  const db = admin.database();
-  const ref = db.ref('password_resets/' + token);
-  const snap = await ref.once('value');
-  const r = snap.val();
-  if (!r) throw new HttpsError('not-found', 'Link inválido');
-  if (r.used) throw new HttpsError('failed-precondition', 'Este link já foi usado');
-  if (Date.now() > r.expires_at) throw new HttpsError('failed-precondition', 'Link expirado');
+    const db = admin.database();
+    const snap = await db.ref('password_resets/' + token).once('value');
+    const r = snap.val();
+    if (!r)     throw new HttpsError('not-found',           'Link inválido');
+    if (r.used) throw new HttpsError('failed-precondition', 'Este link já foi usado');
+    if (Date.now() > r.expires_at) throw new HttpsError('failed-precondition', 'Link expirado');
 
-  await admin.auth().updateUser(r.uid, { password: novaSenha });
-  await db.ref('users/' + r.uid + '/senha_temporaria').set(false);
-  await ref.update({ used: true, used_at: Date.now() });
+    return { valido: true, usuario: r.usuario };
+  }
+);
 
-  return { ok: true, message: 'Senha redefinida com sucesso' };
-});
+// ─── Aplica nova senha ────────────────────────────────────────────────────────
+exports.aplicarResetSenha = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (req) => {
+    const token     = (req.data.token     || '').trim();
+    const novaSenha =  req.data.novaSenha || '';
+    if (!token) throw new HttpsError('invalid-argument', 'Token obrigatório');
+    if (!novaSenha || novaSenha.length < 6) throw new HttpsError('invalid-argument', 'Senha deve ter pelo menos 6 caracteres');
+
+    const db  = admin.database();
+    const ref = db.ref('password_resets/' + token);
+    const snap = await ref.once('value');
+    const r = snap.val();
+    if (!r)     throw new HttpsError('not-found',           'Link inválido');
+    if (r.used) throw new HttpsError('failed-precondition', 'Este link já foi usado');
+    if (Date.now() > r.expires_at) throw new HttpsError('failed-precondition', 'Link expirado');
+
+    await admin.auth().updateUser(r.uid, { password: novaSenha });
+    await db.ref('users/' + r.uid + '/senha_temporaria').set(false);
+    await ref.update({ used: true, used_at: Date.now() });
+
+    return { ok: true, message: 'Senha redefinida com sucesso' };
+  }
+);

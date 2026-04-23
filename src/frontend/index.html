@@ -12,6 +12,19 @@
 <body>
   <div id="toast-container" class="toast-container"></div>
 
+  <!-- Áudio do alarme de almoço (pré-carregado, em loop quando tocar) -->
+  <audio id="alarme-almoco-audio" src="sounds/basic-alarm-ringtone.mp3" loop preload="auto"></audio>
+
+  <!-- Banner flutuante quando o alarme está tocando -->
+  <div id="alarme-banner" class="alarme-banner hidden">
+    <span class="alarme-banner-icon">&#128276;</span>
+    <div class="alarme-banner-text">
+      <strong>Hora de bater o retorno do almoço!</strong>
+      <small>O alarme continuará tocando até você registrar o retorno.</small>
+    </div>
+    <button class="alarme-banner-btn" id="btn-alarme-silenciar">Silenciar</button>
+  </div>
+
   <!-- BANNER UPDATE -->
   <div id="update-banner" class="update-banner hidden">
     <div class="update-banner-content">
@@ -85,8 +98,13 @@
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <img src="images/logo-420x110.png" alt="CCF" class="sidebar-logo">
-        <p>Ponto Digital</p>
+        <div class="user-info">
+          <div class="user-avatar" id="user-avatar">A</div>
+          <div>
+            <div class="user-name" id="user-name">-</div>
+            <div class="user-role" id="user-role">-</div>
+          </div>
+        </div>
       </div>
       <nav class="sidebar-nav">
         <div class="nav-section">Principal</div>
@@ -96,26 +114,32 @@
 
         <div class="nav-section" id="nav-admin-section">Administra&ccedil;&atilde;o</div>
         <a href="#" data-page="funcionarios" class="admin-only"><span class="icon">&#128101;</span> Colaboradores</a>
-        <a href="#" data-page="ajustes-admin" class="admin-only"><span class="icon">&#9989;</span> Ajustes Pendentes</a>
-        <a href="#" data-page="horas-extras-admin" class="admin-only"><span class="icon">&#9203;</span> Horas Extras</a>
+        <a href="#" data-page="ajustes-admin" class="admin-only"><span class="icon">&#9989;</span> Ajustes Pendentes <span id="sidebar-badge-ajustes" style="display:none;background:#ed3c0d;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:50px;margin-left:4px;vertical-align:middle;font-family:'Roboto',sans-serif;"></span></a>
+        <a href="#" data-page="horas-extras-admin" class="admin-only"><span class="icon">&#9203;</span> Banco de Horas</a>
         <a href="#" data-page="abonos-admin" class="admin-only"><span class="icon">&#128203;</span> Abonos</a>
+        <a href="#" data-page="ausencias-admin" class="admin-only"><span class="icon">&#128339;</span> Ausências Intermediárias <span id="sidebar-badge-ausencias" style="display:none;background:#ed3c0d;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:50px;margin-left:4px;vertical-align:middle;font-family:'Roboto',sans-serif;"></span></a>
         <a href="#" data-page="relatorios" class="admin-only"><span class="icon">&#128202;</span> Relat&oacute;rios</a>
-        <a href="#" data-page="inconsistencias" class="admin-only"><span class="icon">&#9888;</span> Inconsist&ecirc;ncias</a>
+        <a href="#" data-page="holerites-admin" class="admin-only"><span class="icon">&#128176;</span> Holerites</a>
         <a href="#" data-page="configuracoes" class="admin-only"><span class="icon">&#9881;</span> Configura&ccedil;&otilde;es</a>
 
         <div class="nav-section func-only">Solicita&ccedil;&otilde;es</div>
         <a href="#" data-page="meus-ajustes" class="func-only"><span class="icon">&#128221;</span> Meus Ajustes</a>
         <a href="#" data-page="meus-abonos" class="func-only"><span class="icon">&#128203;</span> Meus Abonos</a>
+        <a href="#" data-page="minhas-ausencias" class="func-only"><span class="icon">&#128339;</span> Minhas Saídas</a>
+        <a href="#" data-page="meu-holerite" class="func-only"><span class="icon">&#128176;</span> Meu Holerite <span id="sidebar-badge-holerite" style="display:none;background:#ed3c0d;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:50px;margin-left:4px;vertical-align:middle;font-family:'Roboto',sans-serif;"></span></a>
+
+        <div class="nav-section func-only">Preferências</div>
+        <a href="#" id="toggle-alarme-almoco" class="func-only nav-toggle">
+          <span class="icon">&#128276;</span>
+          <span style="flex:1;">Alarme de almoço</span>
+          <span class="nav-switch" id="nav-switch-alarme"><span class="nav-switch-dot"></span></span>
+        </a>
+
+        <div class="nav-section func-only">Ajuda</div>
+        <a href="#" data-page="ajuda" class="func-only"><span class="icon">&#10067;</span> Como usar o sistema</a>
       </nav>
       <div class="sidebar-footer">
-        <div class="user-info">
-          <div class="user-avatar" id="user-avatar">A</div>
-          <div>
-            <div class="user-name" id="user-name">-</div>
-            <div class="user-role" id="user-role">-</div>
-          </div>
-        </div>
-        <button class="btn-logout" id="btn-logout">Sair do Sistema</button>
+        <button class="btn-logout" id="btn-logout" title="Sair do sistema" aria-label="Sair do sistema">Sair do Sistema</button>
         <div class="app-version-info">
           <span class="app-name">Ponto Digital CCF</span>
           <span class="app-version" id="app-version">v-</span>
@@ -132,15 +156,29 @@
     <main class="main-content">
       <!-- DASHBOARD FUNCIONARIO -->
       <div id="page-dashboard" class="page hidden">
-        <div class="page-header"><h1>Dashboard</h1><span id="dashboard-date"></span></div>
+        <div class="page-header">
+          <h1>&#128200; Dashboard</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <div><span id="dashboard-date"></span></div>
+        </div>
         <div class="page-body">
           <!-- Dashboard do funcionário -->
           <div id="dashboard-func" class="hidden">
-            <div class="stats-grid" id="dashboard-stats-func"></div>
-            <div class="card">
-              <div class="card-header"><h3>Registros de Hoje</h3></div>
-              <div id="dashboard-registros-hoje"></div>
+            <div id="dash-greeting"></div>
+            <div id="dash-alertas"></div>
+            <div id="dash-feriado-prox"></div>
+            <div class="card" style="margin-bottom:20px;">
+              <div class="card-header">
+                <h3>&#128338; Jornada de Hoje</h3>
+                <span id="dash-horas-hoje" style="font-size:18px;font-weight:700;color:var(--ccf-blue);"></span>
+              </div>
+              <div id="dash-timeline"></div>
             </div>
+            <div class="card" style="margin-bottom:20px;">
+              <div class="card-header"><h3>&#128197; Resumo do M&ecirc;s</h3></div>
+              <div id="dash-resumo-mes"><div style="padding:20px;text-align:center;color:#aaa;">Carregando...</div></div>
+            </div>
+            <div class="stats-grid" id="dashboard-stats-func"></div>
           </div>
 
           <!-- Dashboard do admin -->
@@ -179,7 +217,7 @@
               <div class="table-container">
                 <table>
                   <thead>
-                    <tr><th>Colaborador</th><th>Cargo</th><th>Depto</th><th>Entrada</th><th>Sa&iacute;da Alm.</th><th>Retorno</th><th>Sa&iacute;da</th><th>Status</th></tr>
+                    <tr><th>Colaborador</th><th>Cargo</th><th>Depto</th><th>Entrada</th><th>Sa&iacute;da Alm.</th><th>Retorno</th><th>Sa&iacute;da</th><th>Status</th><th></th></tr>
                   </thead>
                   <tbody id="admin-presenca-body"></tbody>
                 </table>
@@ -191,7 +229,11 @@
 
       <!-- REGISTRAR PONTO -->
       <div id="page-ponto" class="page">
-        <div class="page-header"><h1>Registrar Ponto</h1></div>
+        <div class="page-header">
+          <h1>&#9201; Registrar Ponto</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <div></div>
+        </div>
         <div class="page-body">
           <div class="card">
             <div class="ponto-container">
@@ -199,7 +241,334 @@
               <div class="date-display" id="date-display"></div>
               <button class="btn-ponto" id="btn-registrar-ponto">Registrar Entrada</button>
               <div class="ponto-tipo" id="ponto-tipo-info"></div>
+              <div id="ponto-saida-intermediaria-wrap" style="margin-top:14px;"></div>
               <div class="registros-hoje" id="ponto-registros-hoje"></div>
+              <div id="ponto-ausencias-hoje" style="margin-top:16px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AUSENCIAS INTERMEDIARIAS (ADMIN) -->
+      <div id="page-ausencias-admin" class="page hidden">
+        <div class="page-header">
+          <h1>&#128339; Ausências Intermediárias</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <button class="btn btn-primary" id="btn-nova-ausencia-admin">+ Inserir saída retroativa</button>
+        </div>
+        <div class="page-body">
+          <div class="filter-bar">
+            <select id="ausencias-filtro-status" class="form-control">
+              <option value="">Todas as classificações</option>
+              <option value="pendente" selected>Pendentes</option>
+              <option value="aguardando_atestado">Aguardando atestado</option>
+              <option value="abonado">Abonadas</option>
+              <option value="descontar">Descontadas</option>
+              <option value="usar_banco">Usadas do banco</option>
+              <option value="em_aberto">Em aberto (sem retorno)</option>
+            </select>
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Colaborador</th>
+                    <th>Data</th>
+                    <th>Saída</th>
+                    <th>Retorno</th>
+                    <th>Duração</th>
+                    <th>Motivo</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="ausencias-admin-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MINHAS AUSENCIAS (COLABORADOR) -->
+      <div id="page-minhas-ausencias" class="page hidden">
+        <div class="page-header">
+          <h1>&#128339; Minhas Saídas Intermediárias</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <div></div>
+        </div>
+        <div class="page-body">
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Saída</th>
+                    <th>Retorno</th>
+                    <th>Duração</th>
+                    <th>Motivo</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="minhas-ausencias-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AJUDA (COLABORADOR) -->
+      <div id="page-ajuda" class="page hidden">
+        <div class="page-header">
+          <h1>&#10067; Como usar o sistema</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <div></div>
+        </div>
+        <div class="page-body">
+          <div class="help-layout">
+            <!-- Sumário / índice -->
+            <aside class="help-toc">
+              <div class="help-toc-title">Sumário</div>
+              <a href="#help-intro">Visão Geral</a>
+              <a href="#help-ponto">1. Registrar Ponto</a>
+              <a href="#help-saida-interm">2. Saída Intermediária</a>
+              <a href="#help-dashboard">3. Dashboard</a>
+              <a href="#help-espelho">4. Espelho de Ponto</a>
+              <a href="#help-ajustes">5. Solicitar Ajuste</a>
+              <a href="#help-abonos">6. Solicitar Abono</a>
+              <a href="#help-holerite">7. Meu Holerite</a>
+              <a href="#help-senha">8. Trocar / Recuperar Senha</a>
+              <a href="#help-alarme">9. Alarme de Almoço</a>
+              <a href="#help-offline">10. Modo Offline</a>
+              <a href="#help-regras">11. Regras e Limites</a>
+              <a href="#help-duvidas">Dúvidas frequentes</a>
+            </aside>
+
+            <!-- Conteúdo -->
+            <div class="help-content">
+
+              <section id="help-intro" class="help-section">
+                <h2>&#128075; Visão Geral</h2>
+                <p>O Ponto Digital CCF é o sistema oficial de registro de ponto da Crédito Casa Financiamentos. Por aqui você:</p>
+                <ul>
+                  <li>Bate seus 4 pontos do dia (entrada, almoço, retorno, saída);</li>
+                  <li>Registra compromissos que te façam sair durante o expediente;</li>
+                  <li>Acompanha seu banco de horas e o total do mês;</li>
+                  <li>Solicita ajuste de horário, atestado médico ou abono de horas;</li>
+                  <li>Recebe e visualiza seus holerites em PDF.</li>
+                </ul>
+                <div class="help-tip">
+                  <strong>&#128161; Dica:</strong> clique nos itens do menu lateral para navegar entre as telas. Seu horário de trabalho fica registrado em seu <strong>perfil de horário</strong> — fale com o RH se algo estiver errado.
+                </div>
+              </section>
+
+              <section id="help-ponto" class="help-section">
+                <h2>&#9201; 1. Registrar Ponto</h2>
+                <p>Esta é a tela principal. O sistema te guia passo a passo, mostrando sempre o <strong>próximo registro</strong> que você precisa fazer.</p>
+                <ol>
+                  <li>Ao chegar no escritório, clique em <strong>"Registrar Entrada"</strong>.</li>
+                  <li>Na hora do almoço, o botão muda para <strong>"Registrar Saída Almoço"</strong>. Clique.</li>
+                  <li>Ao voltar do almoço, aguarde os <strong>60 minutos mínimos</strong> (o próprio botão mostra o contador) e clique em <strong>"Registrar Retorno Almoço"</strong>.</li>
+                  <li>No final do expediente, clique em <strong>"Registrar Saída"</strong>.</li>
+                </ol>
+                <p>Você consegue ver os 4 horários batidos logo abaixo do botão, junto com ícones de relógio/almoço/retorno/saída.</p>
+                <div class="help-tip">
+                  <strong>&#9888; Atenção:</strong> cada tipo só pode ser registrado <strong>uma vez por dia</strong>. Se bateu errado, abra <em>Meus Ajustes</em> e peça correção.
+                </div>
+              </section>
+
+              <section id="help-saida-interm" class="help-section">
+                <h2>&#128339; 2. Saída Intermediária (compromisso)</h2>
+                <p>Precisou sair no meio do expediente para uma consulta, ir ao banco, cartório ou qualquer compromisso? Use o botão <strong>"Registrar Saída Intermediária"</strong> que aparece na tela <em>Registrar Ponto</em>.</p>
+                <ol>
+                  <li>Clique em <strong>"&#128339; Registrar Saída Intermediária"</strong> (ele só aparece enquanto você está trabalhando).</li>
+                  <li>Informe um <strong>motivo</strong> curto e objetivo (ex.: <em>Consulta médica</em>, <em>Banco</em>, <em>Cartório</em>).</li>
+                  <li>Ao voltar, clique em <strong>"Registrar Retorno"</strong> no banner laranja. O sistema calcula a duração da ausência.</li>
+                </ol>
+                <p>Sua ausência será classificada pelo administrador em uma das opções abaixo:</p>
+                <ul>
+                  <li><span class="badge badge-success">✓ Abonada</span> — não desconta nada. Motivo aceito.</li>
+                  <li><span class="badge badge-info">↻ Usa banco</span> — sai das suas horas positivas do banco.</li>
+                  <li><span class="badge badge-warning">📎 Aguarda atestado</span> — você tem prazo para apresentar o atestado médico; se o fizer, vira abonada.</li>
+                  <li><span class="badge badge-danger">✕ Descontada</span> — gera déficit no banco de horas.</li>
+                </ul>
+                <p>Acompanhe todas as suas saídas (e como foram classificadas) em <strong>Minhas Saídas</strong> no menu.</p>
+                <div class="help-tip">
+                  <strong>&#128161; Exemplo prático:</strong> entrou 08:40, saiu para consulta 10:20, voltou 11:40. Quando o admin classificar como "Abonada", essa 1h20 <em>não</em> desconta da sua jornada. Se classificar como "Descontar", você terá que compensar depois ou vira hora negativa.
+                </div>
+                <div class="help-tip" style="background:#fdecea;border-left-color:#d32f2f;color:#8a1f1a;margin-top:12px;">
+                  <strong>&#9888; Esqueceu de registrar?</strong> Se você saiu do escritório sem bater <em>saída intermediária</em>, o administrador <strong>pode registrar a ausência retroativamente</strong> por você. Nesse caso, a classificação padrão é <span class="badge badge-danger" style="font-size:11px;">✕ Descontada</span> — ou seja, o tempo fora vira hora negativa no seu banco. Se tiver justificativa (atestado, compromisso autorizado), apresente para que o admin reclassifique como abonada.
+                </div>
+              </section>
+
+              <section id="help-dashboard" class="help-section">
+                <h2>&#128200; 3. Dashboard</h2>
+                <p>Visão do seu dia. Mostra:</p>
+                <ul>
+                  <li><strong>Saudação e relógio</strong> com a data atual;</li>
+                  <li><strong>Jornada de hoje</strong> (linha do tempo com os 4 pontos — verde = batido, cinza = pendente);</li>
+                  <li><strong>Resumo do mês</strong> (dias presentes, faltas, total trabalhado);</li>
+                  <li><strong>Banco de horas acumulado</strong> (positivo ↑ verde, negativo ↓ vermelho);</li>
+                  <li><strong>Alertas</strong> de ajustes/abonos pendentes;</li>
+                  <li><strong>Próximo feriado</strong>, se houver.</li>
+                </ul>
+              </section>
+
+              <section id="help-espelho" class="help-section">
+                <h2>&#128196; 4. Espelho de Ponto</h2>
+                <p>Seu relatório mensal detalhado. Abra, escolha <strong>mês</strong> e <strong>ano</strong>, clique em <strong>Pesquisar</strong>.</p>
+                <p>Para cada dia do mês, você vê:</p>
+                <ul>
+                  <li>Data, dia da semana e os 4 horários batidos;</li>
+                  <li>Horas trabalhadas e abono de tolerância aplicado;</li>
+                  <li>Status: <span class="badge badge-success">✓ Concluída</span>, <span class="badge badge-danger">✕ Incompleta</span>, <span class="badge badge-danger">Falta</span>, <span class="badge badge-lilac">&#127973; Atestado</span>, <span class="badge badge-info">Abono</span>, <span class="badge badge-info">🌴 Feriado</span>, <span class="badge badge-gray">☀️ Fim de semana</span>;</li>
+                  <li>Badge <strong>🚶 N saídas</strong> se tiver saídas intermediárias naquele dia (passe o mouse para ver detalhes);</li>
+                  <li>Nos dias com horas extras, um botão <strong>"Solicitar +hh:mm"</strong> aparece — clique para pedir aprovação ao admin.</li>
+                </ul>
+                <p>No rodapé: <strong>total de horas trabalhadas</strong>, <strong>horas concedidas</strong> e <strong>saldo do banco</strong>. Use o botão <strong>Relatório</strong> para gerar um PDF formatado para imprimir/baixar.</p>
+              </section>
+
+              <section id="help-ajustes" class="help-section">
+                <h2>&#128221; 5. Solicitar Ajuste</h2>
+                <p>Esqueceu de bater um ponto? Bateu errado? Use <strong>Meus Ajustes</strong> &rarr; botão <strong>"+ Solicitar Ajuste"</strong>.</p>
+                <ol>
+                  <li>Escolha a <strong>data</strong> (finais de semana e feriados não são permitidos).</li>
+                  <li>Preencha somente os horários que precisam ser corrigidos (entrada, saída almoço, retorno, saída).</li>
+                  <li>Explique o <strong>motivo</strong> — seja claro, isso ajuda na aprovação.</li>
+                  <li>Envie. O admin receberá a solicitação e aprovará ou rejeitará.</li>
+                </ol>
+                <p>Acompanhe o status na própria tela:</p>
+                <ul>
+                  <li><span class="badge badge-warning">Pendente</span> — aguardando aprovação.</li>
+                  <li><span class="badge badge-success">Aprovado</span> — horário ajustado no espelho.</li>
+                  <li><span class="badge badge-danger">Rejeitado</span> — com o motivo explicado embaixo.</li>
+                </ul>
+                <div class="help-tip">
+                  <strong>&#9888; Limite:</strong> só é possível pedir ajuste de dias dentro dos <strong>últimos 30 dias</strong>. Passou disso, fale diretamente com o administrador.
+                </div>
+              </section>
+
+              <section id="help-abonos" class="help-section">
+                <h2>&#128203; 6. Solicitar Abono</h2>
+                <p>Em <strong>Meus Abonos</strong>, você pode registrar 3 tipos:</p>
+                <div class="help-grid">
+                  <div class="help-card-small">
+                    <h4>&#127973; Atestado Médico</h4>
+                    <p>Ficou doente ou foi ao médico. Anexe o PDF ou foto do atestado (máx. 5 MB). Cobre o déficit do dia sem gerar horas extras.</p>
+                  </div>
+                  <div class="help-card-small">
+                    <h4>&#9989; Abono de Horas</h4>
+                    <p>Use horas do seu <strong>banco positivo</strong> para folgar em um dia ou um período. O sistema mostra quanto você tem disponível.</p>
+                  </div>
+                  <div class="help-card-small">
+                    <h4>&#8635; Compensação</h4>
+                    <p>Dias em que você vai usar horas extras acumuladas para folgar. Marca os dias como "compensados".</p>
+                  </div>
+                </div>
+                <p>Preencha data início, data fim, (opcional) horário inicial e final, motivo e envie. O admin aprova ou rejeita — e você vê o resultado na lista.</p>
+                <div class="help-tip">
+                  <strong>&#9888; Limite:</strong> abonos retroativos só até 30 dias atrás.
+                </div>
+              </section>
+
+              <section id="help-holerite" class="help-section">
+                <h2>&#128176; 7. Meu Holerite</h2>
+                <p>Seus holerites mensais ficam disponíveis nesta tela em PDF.</p>
+                <ul>
+                  <li>Quando o admin sobe um holerite novo, você recebe um <strong>alerta em vermelho</strong> no menu lateral (com contagem).</li>
+                  <li>Abra <strong>Meu Holerite</strong>, clique em <strong>"&#128196; Visualizar"</strong> no mês desejado.</li>
+                  <li>O PDF abre dentro do sistema. Use o botão <strong>Baixar</strong> para salvar no seu computador/celular.</li>
+                  <li>Depois de aberto, o status vira <span class="badge badge-success">Visto</span>.</li>
+                </ul>
+              </section>
+
+              <section id="help-senha" class="help-section">
+                <h2>&#128274; 8. Trocar / Recuperar Senha</h2>
+                <p><strong>Primeiro acesso:</strong> você será obrigado a trocar a senha temporária no primeiro login.</p>
+                <p><strong>Esqueci minha senha:</strong> na tela de login, clique em <em>"Esqueci minha senha"</em>, informe seu usuário. Se houver e-mail cadastrado, um link chega em até alguns minutos (verifique também a caixa de spam). O link expira em <strong>30 minutos</strong>.</p>
+                <div class="help-tip">
+                  <strong>&#128161; Dica:</strong> nunca compartilhe sua senha. Se desconfiar que alguém descobriu, troque imediatamente.
+                </div>
+              </section>
+
+              <section id="help-alarme" class="help-section">
+                <h2>&#128276; 9. Alarme de Almoço</h2>
+                <p>Para não perder a hora de bater o retorno do almoço, o sistema tem um alarme sonoro opcional.</p>
+                <ol>
+                  <li>No menu lateral, seção <strong>Preferências</strong>, clique em <strong>"Alarme de almoço"</strong> para ativar (o indicador azul acende).</li>
+                  <li>Depois que você bater a <strong>saída do almoço</strong>, o alarme é armado automaticamente.</li>
+                  <li>Faltando <strong>1 minuto</strong> para completar os 60 min obrigatórios (ou seja, 59 min após a saída), o áudio começa a tocar em loop e um banner vermelho aparece no topo.</li>
+                  <li>O som só para quando você <strong>bater o retorno do almoço</strong> — ou clicar em <strong>Silenciar</strong>.</li>
+                  <li>Se preferir, pode desativar o alarme a qualquer momento clicando no mesmo item do menu.</li>
+                </ol>
+                <div class="help-tip">
+                  <strong>&#128161; Dica:</strong> a configuração fica salva neste dispositivo (navegador). Se trocar de computador, precisa ativar de novo.
+                </div>
+                <div class="help-tip" style="background:#e7f5ea;border-left-color:#2e7d32;color:#1e5a2b;">
+                  <strong>&#128172; Autoplay do navegador:</strong> alguns navegadores bloqueiam áudio automático até você interagir com a página. Ao <em>ativar</em> o alarme, o sistema já desbloqueia — então deixe ativado logo no começo do dia.
+                </div>
+              </section>
+
+              <section id="help-offline" class="help-section">
+                <h2>&#128246; 10. Modo Offline</h2>
+                <p>Sem internet? Calma:</p>
+                <ul>
+                  <li>Você consegue <strong>continuar batendo ponto</strong> normalmente — os registros ficam salvos no dispositivo e sincronizam sozinhos quando a conexão volta.</li>
+                  <li>Um aviso "offline" aparece ao lado do ponto ainda não sincronizado.</li>
+                  <li>As demais telas (espelho, abonos, holerites) exigem conexão para carregar.</li>
+                </ul>
+                <p><strong>Importante:</strong> para o modo offline funcionar, você precisa ter feito login online <strong>pelo menos uma vez</strong> naquele dispositivo.</p>
+              </section>
+
+              <section id="help-regras" class="help-section">
+                <h2>&#128203; 11. Regras e Limites</h2>
+                <ul>
+                  <li><strong>Almoço mínimo:</strong> 60 minutos entre a saída do almoço e o retorno.</li>
+                  <li><strong>Abono de tolerância diária:</strong> valor definido pelo admin em seu perfil (ex.: 10-20 min). Se você chega um pouco depois ou sai um pouco antes dentro dessa janela, o sistema não conta como déficit.</li>
+                  <li><strong>Jornada:</strong> calculada a partir da sua jornada semanal ÷ 5 (ex.: 44h/sem = 8h48/dia).</li>
+                  <li><strong>Horas extras:</strong> só entram no banco se forem <strong>aprovadas</strong> pelo administrador.</li>
+                  <li><strong>Finais de semana e feriados:</strong> não há registro de ponto e não contam na jornada.</li>
+                  <li><strong>Saídas intermediárias pendentes:</strong> enquanto o admin não classificar, contam como déficit (vira abono quando classificado).</li>
+                  <li><strong>Ausências retroativas pelo admin:</strong> se você saiu durante o expediente e esqueceu de registrar, o admin pode lançar a ausência por você. Por padrão entra como <em>descontada</em> — apresente a justificativa para reclassificação.</li>
+                  <li><strong>Janela de 30 dias:</strong> ajustes e abonos só podem ser solicitados para datas dentro dos últimos 30 dias.</li>
+                </ul>
+              </section>
+
+              <section id="help-duvidas" class="help-section">
+                <h2>&#10067; Dúvidas frequentes</h2>
+                <div class="help-faq">
+                  <details>
+                    <summary>Esqueci de bater o ponto ontem. E agora?</summary>
+                    <p>Abra <strong>Meus Ajustes</strong>, peça ajuste da data de ontem preenchendo o horário correto e o motivo. O admin aprova.</p>
+                  </details>
+                  <details>
+                    <summary>Meu banco de horas está negativo. O que fazer?</summary>
+                    <p>Você pode compensar fazendo horas extras (que precisam ser aprovadas) ou apresentar atestados/abonos que cubram os déficits. Converse com seu gestor.</p>
+                  </details>
+                  <details>
+                    <summary>Fui em uma consulta rápida e voltei. Preciso registrar?</summary>
+                    <p>Sim. Use <strong>Saída Intermediária</strong> ao sair e <strong>Registrar Retorno</strong> ao voltar. O admin classifica depois se essa ausência será abonada ou descontada.</p>
+                  </details>
+                  <details>
+                    <summary>Saí do escritório e esqueci de registrar a saída intermediária. O que acontece?</summary>
+                    <p>O admin pode <strong>lançar a ausência retroativa</strong> por você, e nesse caso o padrão é <em>descontar do banco de horas</em>. Se houver justificativa (atestado, compromisso autorizado, etc.), apresente o documento ou fale com seu gestor — ele pode reclassificar como abonada e o saldo volta ao normal.</p>
+                  </details>
+                  <details>
+                    <summary>O sistema diz "almoço mínimo de 60 minutos" e trava o botão. Por quê?</summary>
+                    <p>Para cumprir a regra trabalhista — pelo menos 1 hora de descanso entre a saída e o retorno do almoço. Aguarde o contador chegar a zero.</p>
+                  </details>
+                  <details>
+                    <summary>Como vejo quantas horas já trabalhei hoje?</summary>
+                    <p>No <strong>Dashboard</strong>, card <em>"Horas Trabalhadas Hoje"</em>. O valor atualiza conforme você vai batendo os pontos do dia.</p>
+                  </details>
+                  <details>
+                    <summary>O link de recuperação de senha não chegou.</summary>
+                    <p>Confira a caixa de spam e o e-mail cadastrado (fale com o admin se não tiver certeza de qual está registrado). O link expira em 30 min — pode ser necessário solicitar um novo.</p>
+                  </details>
+                </div>
+              </section>
+
             </div>
           </div>
         </div>
@@ -208,7 +577,8 @@
       <!-- MEU ESPELHO -->
       <div id="page-meu-espelho" class="page hidden">
         <div class="page-header">
-          <h1>Espelho de Ponto</h1>
+          <h1>&#128196; Espelho de Ponto</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
           <div class="btn-group" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
             <select id="espelho-mes" class="form-control" style="width:auto;min-width:130px;"></select>
             <select id="espelho-ano" class="form-control" style="width:auto;min-width:90px;"></select>
@@ -224,7 +594,7 @@
                 <thead>
                   <tr>
                     <th>Data</th><th>Dia</th><th>Entrada</th><th>Sa&iacute;da Almo&ccedil;o</th>
-                    <th>Retorno</th><th>Sa&iacute;da</th><th>Total</th><th>Status</th>
+                    <th>Retorno</th><th>Sa&iacute;da</th><th>Horas Trabalhadas</th><th>Abono</th><th>Total</th><th>Status</th>
                   </tr>
                 </thead>
                 <tbody id="espelho-body"></tbody>
@@ -238,44 +608,77 @@
       <!-- FUNCIONARIOS -->
       <div id="page-funcionarios" class="page hidden">
         <div class="page-header">
-          <h1>Colaboradores</h1>
-          <button class="btn btn-primary" id="btn-novo-funcionario">+ Novo Colaborador</button>
+          <h1>&#128101; Colaboradores</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <div class="btn-group">
+            <button class="btn btn-primary" id="btn-novo-funcionario">+ Novo Colaborador</button>
+            <button class="btn btn-primary hidden" id="btn-novo-administrador">+ Novo Administrador</button>
+          </div>
         </div>
         <div class="page-body">
-          <div class="filter-bar">
-            <input type="text" id="filtro-busca" class="form-control" placeholder="Buscar por nome, usu&aacute;rio...">
-            <select id="filtro-depto" class="form-control">
-              <option value="">Todos os departamentos</option>
-              <option value="Tecnologia">Tecnologia</option>
-              <option value="Operacional">Operacional</option>
-              <option value="Suporte">Suporte</option>
-              <option value="Atendimento">Atendimento</option>
-              <option value="Diretoria">Diretoria</option>
-            </select>
-            <select id="filtro-ativo" class="form-control">
-              <option value="1">Ativos</option><option value="0">Inativos</option>
-            </select>
+          <!-- Abas -->
+          <div class="page-tabs">
+            <button class="tab-btn active" id="tab-colaboradores" onclick="switchFuncTab('colaboradores')">Colaboradores</button>
+            <button class="tab-btn" id="tab-administradores" onclick="switchFuncTab('administradores')">Administradores</button>
           </div>
-          <div class="card">
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Nome</th><th>Usu&aacute;rio</th><th>Cargo</th><th>Depto</th>
-                    <th>Perfil Hor&aacute;rio</th><th>Jornada</th><th>Role</th><th>A&ccedil;&otilde;es</th>
-                  </tr>
-                </thead>
-                <tbody id="funcionarios-body"></tbody>
-              </table>
+
+          <!-- Painel: Colaboradores -->
+          <div id="tab-panel-colaboradores">
+            <div class="filter-bar">
+              <input type="text" id="filtro-busca" class="form-control" placeholder="Buscar por nome, usu&aacute;rio...">
+              <select id="filtro-depto" class="form-control">
+                <option value="">Todos os departamentos</option>
+                <option value="Tecnologia">Tecnologia</option>
+                <option value="Operacional">Operacional</option>
+                <option value="Suporte">Suporte</option>
+                <option value="Atendimento">Atendimento</option>
+                <option value="Diretoria">Diretoria</option>
+              </select>
+              <select id="filtro-ativo" class="form-control">
+                <option value="1">Ativos</option><option value="0">Inativos</option>
+              </select>
             </div>
-            <div class="pagination" id="funcionarios-pagination"></div>
+            <div class="card">
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nome</th><th>Usu&aacute;rio</th><th>Cargo</th><th>Depto</th>
+                      <th>Perfil Hor&aacute;rio</th><th>Jornada</th><th>A&ccedil;&otilde;es</th>
+                    </tr>
+                  </thead>
+                  <tbody id="funcionarios-body"></tbody>
+                </table>
+              </div>
+              <div class="pagination" id="funcionarios-pagination"></div>
+            </div>
+          </div>
+
+          <!-- Painel: Administradores -->
+          <div id="tab-panel-administradores" class="hidden">
+            <div class="card">
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nome</th><th>Usu&aacute;rio</th><th>Email</th><th>A&ccedil;&otilde;es</th>
+                    </tr>
+                  </thead>
+                  <tbody id="administradores-body"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- AJUSTES PENDENTES (admin) -->
       <div id="page-ajustes-admin" class="page hidden">
-        <div class="page-header"><h1>Ajustes Pendentes</h1></div>
+        <div class="page-header">
+          <h1>&#9989; Ajustes Pendentes</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <div></div>
+        </div>
         <div class="page-body">
           <div class="card">
             <div class="table-container">
@@ -290,17 +693,47 @@
         </div>
       </div>
 
-      <!-- HORAS EXTRAS ADMIN -->
+      <!-- BANCO DE HORAS ADMIN -->
       <div id="page-horas-extras-admin" class="page hidden">
-        <div class="page-header"><h1>Horas Extras Pendentes</h1></div>
+        <div class="page-header">
+          <h1>&#9203; Banco de Horas</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <div></div>
+        </div>
         <div class="page-body">
-          <div class="card">
+          <div class="card mb-3">
+            <div class="card-header"><h3>&#128077; Horas Positivas Solicitadas</h3></div>
             <div class="table-container">
               <table>
                 <thead>
-                  <tr><th>Colaborador</th><th>Data</th><th>Minutos Extras</th><th>Solicitado em</th><th>A&ccedil;&otilde;es</th></tr>
+                  <tr><th>Colaborador</th><th>Data</th><th>Horas Positivas</th><th>Solicitado em</th><th>A&ccedil;&otilde;es</th></tr>
                 </thead>
                 <tbody id="horas-extras-pendentes-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+              <h3>&#128078; Colaboradores com Horas Negativas</h3>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <select id="banco-horas-mes" class="form-control" style="width:auto;">
+                  <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+                  <option value="3">Mar&ccedil;o</option><option value="4">Abril</option>
+                  <option value="5">Maio</option><option value="6">Junho</option>
+                  <option value="7">Julho</option><option value="8">Agosto</option>
+                  <option value="9">Setembro</option><option value="10">Outubro</option>
+                  <option value="11">Novembro</option><option value="12">Dezembro</option>
+                </select>
+                <input type="number" id="banco-horas-ano" class="form-control" style="width:90px;" value="">
+                <button class="btn btn-primary btn-sm" onclick="loadHorasNegativas()">Ver</button>
+              </div>
+            </div>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr><th>Colaborador</th><th>Departamento</th><th>Horas Negativas no M&ecirc;s</th></tr>
+                </thead>
+                <tbody id="horas-negativas-body"><tr><td colspan="3" class="text-center text-muted">Selecione o m&ecirc;s e clique em Ver</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -310,7 +743,8 @@
       <!-- RELATORIOS -->
       <div id="page-relatorios" class="page hidden">
         <div class="page-header">
-          <h1>Relat&oacute;rios</h1>
+          <h1>&#128202; Relat&oacute;rios</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
           <div class="btn-group">
             <select id="rel-mes" class="form-control"></select>
             <select id="rel-ano" class="form-control"></select>
@@ -332,33 +766,14 @@
         </div>
       </div>
 
-      <!-- INCONSISTENCIAS -->
-      <div id="page-inconsistencias" class="page hidden">
-        <div class="page-header">
-          <h1>Inconsist&ecirc;ncias</h1>
-          <div class="btn-group">
-            <select id="incon-mes" class="form-control"></select>
-            <select id="incon-ano" class="form-control"></select>
-            <button class="btn btn-primary" id="btn-gerar-inconsistencias">Verificar</button>
-          </div>
-        </div>
-        <div class="page-body">
-          <div class="card">
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr><th>Colaborador</th><th>Data</th><th>Registros</th><th>Problemas</th></tr>
-                </thead>
-                <tbody id="inconsistencias-body"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <!-- CONFIGURACOES -->
       <div id="page-configuracoes" class="page hidden">
-        <div class="page-header"><h1>Configura&ccedil;&otilde;es</h1></div>
+        <div class="page-header">
+          <h1>&#9881; Configura&ccedil;&otilde;es</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <div></div>
+        </div>
         <div class="page-body">
           <!-- Tolerância -->
           <div class="card">
@@ -417,7 +832,8 @@
       <!-- MEUS AJUSTES -->
       <div id="page-meus-ajustes" class="page hidden">
         <div class="page-header">
-          <h1>Meus Ajustes</h1>
+          <h1>&#128221; Meus Ajustes</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
           <button class="btn btn-primary" id="btn-solicitar-ajuste">+ Solicitar Ajuste</button>
         </div>
         <div class="page-body">
@@ -436,7 +852,8 @@
       <!-- MEUS ABONOS (colaborador) -->
       <div id="page-meus-abonos" class="page hidden">
         <div class="page-header">
-          <h1>Meus Abonos</h1>
+          <h1>&#128203; Meus Abonos</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
           <button class="btn btn-primary" id="btn-solicitar-abono">+ Solicitar Abono</button>
         </div>
         <div class="page-body">
@@ -449,6 +866,7 @@
                     <th>Per&iacute;odo</th>
                     <th>Horas</th>
                     <th>Motivo</th>
+                    <th>Documento</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -459,14 +877,56 @@
         </div>
       </div>
 
+      <!-- HOLERITES (admin) -->
+      <div id="page-holerites-admin" class="page hidden">
+        <div class="page-header">
+          <h1>&#128176; Holerites</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <button class="btn btn-primary" id="btn-novo-holerite">+ Enviar Holerite</button>
+        </div>
+        <div class="page-body">
+          <div class="filter-bar">
+            <select id="holerite-filtro-colab" class="form-control">
+              <option value="">Todos os colaboradores</option>
+            </select>
+            <select id="holerite-filtro-ano" class="form-control" style="width:auto;">
+              <option value="">Todos os anos</option>
+            </select>
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr><th>Colaborador</th><th>M&ecirc;s / Ano</th><th>Enviado em</th><th>Visualizado</th><th>A&ccedil;&otilde;es</th></tr>
+                </thead>
+                <tbody id="holerites-admin-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MEU HOLERITE (colaborador) -->
+      <div id="page-meu-holerite" class="page hidden">
+        <div class="page-header">
+          <h1>&#128176; Meu Holerite</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <div></div>
+        </div>
+        <div class="page-body">
+          <div id="meu-holerite-lista"></div>
+        </div>
+      </div>
+
       <!-- ABONOS (admin) -->
       <div id="page-abonos-admin" class="page hidden">
         <div class="page-header">
-          <h1>Gerenciar Abonos</h1>
+          <h1>&#128203; Gerenciar Abonos</h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
           <div class="btn-group">
             <select id="abonos-filtro-status" class="form-control">
-              <option value="pendente">Pendentes</option>
               <option value="">Todos</option>
+              <option value="pendente">Pendentes</option>
               <option value="aprovado">Aprovados</option>
               <option value="rejeitado">Rejeitados</option>
             </select>
@@ -489,6 +949,7 @@
                     <th>Per&iacute;odo</th>
                     <th>Horas</th>
                     <th>Motivo</th>
+                    <th>Documento</th>
                     <th>Status</th>
                     <th>A&ccedil;&otilde;es</th>
                   </tr>
@@ -512,6 +973,18 @@
       <div class="modal-body">
         <form id="form-funcionario">
           <input type="hidden" id="func-id">
+          <div id="func-foto-section" class="form-group hidden">
+            <label>Foto de Perfil</label>
+            <div class="foto-upload-wrap">
+              <div class="foto-preview" id="func-foto-preview">?</div>
+              <div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('func-foto-input').click()">Alterar Foto</button>
+                <button type="button" class="btn btn-sm btn-danger" id="btn-remover-foto" style="display:none;" onclick="_removerFotoPreview()">Remover</button>
+                <input type="file" id="func-foto-input" accept="image/*" style="display:none" onchange="_previewFotoFunc(this)">
+                <small class="text-muted" style="display:block;margin-top:4px;">JPG, PNG ou WEBP. M&aacute;x. 2 MB</small>
+              </div>
+            </div>
+          </div>
           <div class="form-row">
             <div class="form-group">
               <label>Nome *</label>
@@ -534,7 +1007,13 @@
           <div class="form-row">
             <div class="form-group">
               <label>Cargo</label>
-              <input type="text" id="func-cargo" class="form-control">
+              <select id="func-cargo" class="form-control">
+                <option value="">Selecione...</option>
+                <option value="Assistente Administrativo">Assistente Administrativo</option>
+                <option value="Gerente">Gerente</option>
+                <option value="Analista de Crédito">Analista de Cr&eacute;dito</option>
+                <option value="Estagiário">Estagi&aacute;rio</option>
+              </select>
             </div>
             <div class="form-group">
               <label>Departamento</label>
@@ -548,26 +1027,27 @@
               </select>
             </div>
           </div>
-          <div class="form-group">
-            <label>Perfil de Hor&aacute;rio</label>
-            <select id="func-perfil-horario" class="form-control">
-              <option value="">Nenhum (definir manualmente)</option>
-            </select>
-            <small class="text-muted" id="func-perfil-info"></small>
-          </div>
-          <div class="form-row">
+          <div id="func-jornada-fields">
             <div class="form-group">
-              <label>Jornada Semanal (horas)</label>
-              <input type="number" id="func-jornada" class="form-control" value="44" step="0.5">
-            </div>
-            <div class="form-group">
-              <label>N&iacute;vel de Acesso</label>
-              <select id="func-role" class="form-control">
-                <option value="funcionario">Colaborador</option>
-                <option value="admin">Administrador</option>
+              <label>Perfil de Hor&aacute;rio</label>
+              <select id="func-perfil-horario" class="form-control">
+                <option value="">Nenhum (definir manualmente)</option>
               </select>
+              <small class="text-muted" id="func-perfil-info"></small>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Jornada Semanal (horas)</label>
+                <input type="number" id="func-jornada" class="form-control" value="44" step="0.5">
+              </div>
+              <div class="form-group">
+                <label>Abono de Toler&acirc;ncia (min/dia)</label>
+                <input type="number" id="func-abono" class="form-control" value="0" min="0" max="120" step="1" placeholder="0">
+                <small class="text-muted">Minutos concedidos pela empresa por dia trabalhado</small>
+              </div>
             </div>
           </div>
+          <input type="hidden" id="func-role" value="funcionario">
         </form>
       </div>
       <div class="modal-footer">
@@ -578,35 +1058,40 @@
   </div>
 
   <div class="modal-overlay" id="modal-ajuste">
-    <div class="modal">
+    <div class="modal" style="max-width:460px;">
       <div class="modal-header">
-        <h3>Solicitar Ajuste de Ponto</h3>
+        <h3>&#9998; Solicitar Ajuste de Ponto</h3>
         <button class="modal-close" onclick="closeModal('modal-ajuste')">&times;</button>
       </div>
       <div class="modal-body">
-        <form id="form-ajuste">
-          <div class="form-group">
-            <label>Data *</label>
-            <input type="date" id="ajuste-data" class="form-control" required>
+        <div class="form-group">
+          <label>Data *</label>
+          <input type="date" id="ajuste-data" class="form-control" onchange="_validarDataAjuste(this)">
+          <small id="ajuste-data-aviso" style="color:#ed3c0d;display:none;margin-top:4px;display:none;"></small>
+        </div>
+        <p class="text-muted" style="font-size:12px;margin:0 0 10px;">Preencha apenas os hor&aacute;rios que deseja corrigir:</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:13px;">Entrada</label>
+            <input type="time" id="ajuste-hora-entrada" class="form-control">
           </div>
-          <div class="form-group">
-            <label>Tipo de Registro *</label>
-            <select id="ajuste-tipo" class="form-control" required>
-              <option value="entrada">Entrada</option>
-              <option value="saida_almoco">Sa&iacute;da para Almo&ccedil;o</option>
-              <option value="retorno_almoco">Retorno do Almo&ccedil;o</option>
-              <option value="saida">Sa&iacute;da</option>
-            </select>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:13px;">Sa&iacute;da Almo&ccedil;o</label>
+            <input type="time" id="ajuste-hora-saida-almoco" class="form-control">
           </div>
-          <div class="form-group">
-            <label>Hor&aacute;rio Correto *</label>
-            <input type="time" id="ajuste-hora" class="form-control" required>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:13px;">Retorno Almo&ccedil;o</label>
+            <input type="time" id="ajuste-hora-retorno-almoco" class="form-control">
           </div>
-          <div class="form-group">
-            <label>Motivo *</label>
-            <textarea id="ajuste-motivo" class="form-control" rows="3" required></textarea>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:13px;">Sa&iacute;da</label>
+            <input type="time" id="ajuste-hora-saida" class="form-control">
           </div>
-        </form>
+        </div>
+        <div class="form-group" style="margin-top:14px;">
+          <label>Motivo *</label>
+          <textarea id="ajuste-motivo" class="form-control" rows="3" placeholder="Descreva o motivo do ajuste..."></textarea>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-ajuste')">Cancelar</button>
@@ -708,8 +1193,14 @@
           <select id="abono-tipo" class="form-control" required>
             <option value="atestado">Atestado M&eacute;dico</option>
             <option value="abono_horas">Abono de Horas</option>
-            <option value="compensacao">Compensa&ccedil;&atilde;o</option>
           </select>
+        </div>
+        <div id="abono-horas-saldo-group" class="hidden">
+          <div id="abono-saldo-card" class="form-group" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;">
+            <label id="abono-saldo-label" style="font-size:12px;color:#166534;margin-bottom:4px;">Saldo de Horas Positivas dispon&iacute;vel</label>
+            <div id="abono-horas-saldo-display" style="font-size:22px;font-weight:700;color:#166534;" data-minutos="0">00:00</div>
+            <small id="abono-saldo-hint" class="text-muted">Voc&ecirc; pode usar todas ou parte dessas horas como cr&eacute;dito.</small>
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -721,18 +1212,66 @@
             <input type="date" id="abono-data-fim" class="form-control" required>
           </div>
         </div>
-        <div class="form-group">
-          <label>Horas (opcional, para abono parcial)</label>
-          <input type="number" id="abono-horas" class="form-control" step="0.5" min="0" placeholder="Ex: 2.5">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Hora In&iacute;cio <small class="text-muted">(opcional)</small></label>
+            <input type="time" id="abono-hora-inicio" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>Hora Fim <small class="text-muted">(opcional)</small></label>
+            <input type="time" id="abono-hora-fim" class="form-control">
+          </div>
         </div>
         <div class="form-group">
           <label>Motivo / Justificativa *</label>
           <textarea id="abono-motivo" class="form-control" rows="3" placeholder="Descreva o motivo do abono..." required></textarea>
         </div>
+        <div class="form-group" id="abono-arquivo-group">
+          <label>Documento / Atestado</label>
+          <input type="file" id="abono-arquivo" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.webp">
+          <small class="text-muted">PDF ou imagem (m&aacute;x. 5 MB). Opcional, mas recomendado.</small>
+          <div id="abono-arquivo-preview" class="hidden" style="margin-top:8px;"></div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-abono')">Cancelar</button>
         <button class="btn btn-primary" id="btn-salvar-abono">Enviar Solicita&ccedil;&atilde;o</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL VER DOCUMENTO (admin) -->
+  <div class="modal-overlay" id="modal-ver-documento">
+    <div class="modal" style="max-width:900px;width:95vw;">
+      <div class="modal-header">
+        <h3 id="modal-ver-documento-title">&#128196; Documento Anexado</h3>
+        <button class="modal-close" onclick="closeModal('modal-ver-documento')">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-documento-body" style="padding:0;overflow:hidden;border-radius:0 0 8px 8px;"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-ver-documento')">Fechar</button>
+        <a id="btn-baixar-documento" class="btn btn-primary" target="_blank" rel="noopener">&#8681; Baixar</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CONFIRMAR AÇÃO DE AJUSTE (admin) -->
+  <div class="modal-overlay" id="modal-confirmar-ajuste">
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header" id="confirmar-ajuste-header">
+        <h3 id="confirmar-ajuste-titulo"></h3>
+        <button class="modal-close" onclick="closeModal('modal-confirmar-ajuste')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="confirmar-ajuste-info" class="ajuste-confirm-info"></div>
+        <div id="confirmar-ajuste-motivo-wrap" class="form-group" style="margin-top:14px;display:none;">
+          <label>Motivo da rejei&ccedil;&atilde;o *</label>
+          <textarea id="confirmar-ajuste-motivo" class="form-control" rows="3" placeholder="Descreva o motivo..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-confirmar-ajuste')">Cancelar</button>
+        <button class="btn" id="confirmar-ajuste-btn"></button>
       </div>
     </div>
   </div>
@@ -754,6 +1293,43 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-rejeitar-abono')">Cancelar</button>
         <button class="btn btn-danger" id="btn-confirmar-rejeitar-abono">Rejeitar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL GENÉRICO DE CONFIRMAÇÃO -->
+  <div class="modal-overlay" id="modal-confirmar-generico">
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header" id="confirmar-generico-header">
+        <h3 id="confirmar-generico-titulo">Confirmar</h3>
+        <button class="modal-close" onclick="closeModal('modal-confirmar-generico')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="confirmar-generico-mensagem" style="font-size:14px;color:#444;line-height:1.55;white-space:pre-wrap;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-confirmar-generico-cancelar">Cancelar</button>
+        <button class="btn btn-primary" id="btn-confirmar-generico-ok">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL GENÉRICO DE PROMPT -->
+  <div class="modal-overlay" id="modal-prompt-generico">
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header">
+        <h3 id="prompt-generico-titulo">Informe</h3>
+        <button class="modal-close" onclick="closeModal('modal-prompt-generico')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="prompt-generico-mensagem" style="font-size:14px;color:#444;margin-bottom:12px;line-height:1.55;white-space:pre-wrap;"></div>
+        <div class="form-group" style="margin-bottom:0;">
+          <input type="text" id="prompt-generico-input" class="form-control" placeholder="">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-prompt-generico-cancelar">Cancelar</button>
+        <button class="btn btn-primary" id="btn-prompt-generico-ok">OK</button>
       </div>
     </div>
   </div>
@@ -786,6 +1362,223 @@
       </div>
     </div>
   </div>
+
+  <!-- MODAL AJUSTE DE PONTO (ADMIN) -->
+  <div class="modal-overlay" id="modal-ajuste-ponto-admin">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header">
+        <h3>&#9998; Ajustar Ponto</h3>
+        <button class="modal-close" onclick="closeModal('modal-ajuste-ponto-admin')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" id="ajuste-ponto-nome" style="margin-bottom:16px;font-weight:600;"></p>
+        <input type="hidden" id="ajuste-ponto-uid">
+        <input type="hidden" id="ajuste-ponto-data">
+        <div class="form-group">
+          <label>Entrada</label>
+          <input type="time" id="ajuste-entrada" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>Sa&iacute;da Almo&ccedil;o</label>
+          <input type="time" id="ajuste-saida-almoco" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>Retorno Almo&ccedil;o</label>
+          <input type="time" id="ajuste-retorno-almoco" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>Sa&iacute;da</label>
+          <input type="time" id="ajuste-saida" class="form-control">
+        </div>
+        <p class="text-muted" style="font-size:12px;margin-top:8px;">Deixe o campo em branco para remover o registro. A data ajustada &eacute; <strong id="ajuste-data-label"></strong>.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-ajuste-ponto-admin')">Cancelar</button>
+        <button class="btn btn-primary" id="btn-salvar-ajuste-ponto">Salvar Ajuste</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MOTIVO SAÍDA INTERMEDIÁRIA (colaborador) -->
+  <div class="modal-overlay" id="modal-saida-intermediaria">
+    <div class="modal" style="max-width:460px;">
+      <div class="modal-header">
+        <h3>&#128339; Registrar Saída Intermediária</h3>
+        <button class="modal-close" onclick="closeModal('modal-saida-intermediaria')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="font-size:13px;margin:0 0 14px;">Informe o motivo da saída. Ao voltar, registre seu retorno nesta mesma tela.</p>
+        <div class="form-group">
+          <label>Motivo *</label>
+          <input type="text" id="saida-interm-motivo" class="form-control" maxlength="120" placeholder="Ex.: Consulta médica, Banco, Cartório">
+        </div>
+        <div style="background:#fff8e1;border-left:4px solid #ffa726;padding:10px 14px;border-radius:4px;font-size:12px;color:#7a5a00;">
+          A hora atual será registrada como saída. O admin classificará a ausência após seu retorno (abonada, descontada, etc).
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-saida-intermediaria')">Cancelar</button>
+        <button class="btn btn-primary" id="btn-confirmar-saida-intermediaria">Confirmar Saída</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL INSERIR AUSENCIA RETROATIVA (admin) -->
+  <div class="modal-overlay" id="modal-nova-ausencia-admin">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <h3>&#128339; Inserir Saída Intermediária Retroativa</h3>
+        <button class="modal-close" onclick="closeModal('modal-nova-ausencia-admin')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="font-size:13px;margin:0 0 14px;">Use quando o colaborador esqueceu de registrar a saída no dia. A ausência entra já classificada.</p>
+        <div class="form-group">
+          <label>Colaborador *</label>
+          <select id="nova-aus-colab" class="form-control">
+            <option value="">Selecione o colaborador...</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Data *</label>
+            <input type="date" id="nova-aus-data" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>Hora saída *</label>
+            <input type="time" id="nova-aus-hora-saida" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>Hora retorno *</label>
+            <input type="time" id="nova-aus-hora-retorno" class="form-control">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Motivo *</label>
+          <input type="text" id="nova-aus-motivo" class="form-control" maxlength="120" placeholder="Ex.: Assuntos pessoais sem justificativa">
+        </div>
+        <div class="form-group">
+          <label>Classificação *</label>
+          <select id="nova-aus-status" class="form-control">
+            <option value="descontar" selected>Descontar — gera déficit (uso comum)</option>
+            <option value="abonado">Abonar — não desconta</option>
+            <option value="usar_banco">Usar do banco — debita horas positivas</option>
+            <option value="aguardando_atestado">Aguardar atestado</option>
+            <option value="pendente">Pendente</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Observação (opcional)</label>
+          <textarea id="nova-aus-obs" class="form-control" rows="2" maxlength="240" placeholder="Ex.: saiu sem informar, conforme registro da recepção"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-nova-ausencia-admin')">Cancelar</button>
+        <button class="btn btn-primary" id="btn-salvar-nova-ausencia-admin">Registrar ausência</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CLASSIFICAR AUSENCIA (admin) -->
+  <div class="modal-overlay" id="modal-classificar-ausencia">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <h3>&#128339; Classificar Ausência</h3>
+        <button class="modal-close" onclick="closeModal('modal-classificar-ausencia')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="classificar-ausencia-id">
+        <div id="classificar-ausencia-info" style="background:#f4f6fa;padding:12px;border-radius:6px;margin-bottom:14px;font-size:13px;"></div>
+        <div class="form-group">
+          <label>Classificação *</label>
+          <select id="classificar-ausencia-status" class="form-control">
+            <option value="abonado">Abonar — não desconta do banco</option>
+            <option value="descontar">Descontar — gera déficit</option>
+            <option value="usar_banco">Usar do banco — debita das horas positivas</option>
+            <option value="aguardando_atestado">Aguardar atestado</option>
+            <option value="pendente">Voltar para pendente</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Observação (opcional)</label>
+          <textarea id="classificar-ausencia-obs" class="form-control" rows="2" maxlength="240"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-classificar-ausencia')">Cancelar</button>
+        <button class="btn btn-primary" id="btn-salvar-classificar-ausencia">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL UPLOAD HOLERITE (admin) -->
+  <div class="modal-overlay" id="modal-holerite">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h3>&#128176; Enviar Holerite</h3>
+        <button class="modal-close" onclick="closeModal('modal-holerite')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Colaborador *</label>
+          <select id="holerite-colaborador" class="form-control" required>
+            <option value="">Selecione o colaborador...</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>M&ecirc;s *</label>
+            <select id="holerite-mes" class="form-control" required>
+              <option value="1">Janeiro</option>
+              <option value="2">Fevereiro</option>
+              <option value="3">Mar&ccedil;o</option>
+              <option value="4">Abril</option>
+              <option value="5">Maio</option>
+              <option value="6">Junho</option>
+              <option value="7">Julho</option>
+              <option value="8">Agosto</option>
+              <option value="9">Setembro</option>
+              <option value="10">Outubro</option>
+              <option value="11">Novembro</option>
+              <option value="12">Dezembro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Ano *</label>
+            <input type="number" id="holerite-ano" class="form-control" min="2020" max="2099">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Arquivo PDF *</label>
+          <input type="file" id="holerite-arquivo" class="form-control" accept=".pdf,application/pdf">
+          <small class="text-muted">Somente PDF. M&aacute;x. 5 MB.</small>
+        </div>
+        <div id="holerite-upload-info" class="hidden" style="margin-top:8px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;color:#166534;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-holerite')">Cancelar</button>
+        <button class="btn btn-primary" id="btn-salvar-holerite">Enviar Holerite</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL RELATÓRIO PDF ESPELHO -->
+  <div class="modal-overlay" id="modal-espelho-pdf">
+    <div class="modal" style="max-width:980px;width:96vw;">
+      <div class="modal-header">
+        <h3>&#128196; Relat&oacute;rio de Ponto</h3>
+        <button class="modal-close" onclick="closeModal('modal-espelho-pdf')">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-espelho-pdf-body" style="padding:0;overflow:hidden;border-radius:0 0 8px 8px;min-height:200px;display:flex;align-items:center;justify-content:center;"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-espelho-pdf')">Fechar</button>
+        <a id="btn-baixar-espelho-pdf" class="btn btn-primary">&#8681; Baixar PDF</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- jsPDF + AutoTable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
   <!-- Firebase SDK (compat mode — sintaxe que combina com api.js) -->
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>

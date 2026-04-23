@@ -45,6 +45,15 @@
       }
     },
 
+    "saidas_intermediarias": {
+      ".read": "auth != null",
+      ".indexOn": ["funcionario_uid", "data", "status"],
+      "$id": {
+        ".write": "auth != null && (!data.exists() ? (newData.child('funcionario_uid').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin') : root.child('users').child(auth.uid).child('role').val() === 'admin' || (data.child('funcionario_uid').val() === auth.uid && !data.child('hora_retorno').exists()))",
+        ".validate": "newData.hasChildren(['funcionario_uid','data','hora_saida','motivo','status'])"
+      }
+    },
+
     "horas_extras": {
       ".read": "auth != null",
       ".indexOn": ["funcionario_uid", "status", "data"],
@@ -69,6 +78,18 @@
 
     "configuracoes": {
       ".read": "auth != null"
+    },
+
+    "holerites": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        "$key": {
+          "lido": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        }
+      }
     }
   }
 }

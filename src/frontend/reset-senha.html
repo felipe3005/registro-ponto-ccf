@@ -71,9 +71,9 @@
     </div>
   </div>
 
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-functions-compat.js"></script>
   <script src="/__/firebase/init.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-functions-compat.js"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token') || '';
@@ -101,9 +101,8 @@
         return;
       }
       try {
-        const functions = firebase.app().functions('us-central1');
-        const validar = functions.httpsCallable('validarTokenReset');
-        const res = await validar({ token });
+        const fn = firebase.app().functions('us-central1');
+        const res = await fn.httpsCallable('validarTokenReset')({ token });
         loading.classList.add('hidden');
         if (res.data && res.data.valido) {
           usuarioLabel.textContent = res.data.usuario || '';
@@ -113,8 +112,7 @@
         }
       } catch (e) {
         loading.classList.add('hidden');
-        const msg = (e && e.message) || 'Link inválido ou expirado.';
-        showMsg('error', msg);
+        showMsg('error', (e && e.message) || 'Link inválido ou expirado.');
       }
     }
 
@@ -127,9 +125,8 @@
       btnEnviar.disabled = true;
       btnEnviar.textContent = 'Redefinindo...';
       try {
-        const functions = firebase.app().functions('us-central1');
-        const aplicar = functions.httpsCallable('aplicarResetSenha');
-        await aplicar({ token, novaSenha: nova });
+        const fn = firebase.app().functions('us-central1');
+        await fn.httpsCallable('aplicarResetSenha')({ token, novaSenha: nova });
         form.classList.add('hidden');
         showMsg('success', '✓ Senha redefinida com sucesso! Você já pode entrar com sua nova senha.');
       } catch (e) {

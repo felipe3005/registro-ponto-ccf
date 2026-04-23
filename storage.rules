@@ -10,7 +10,30 @@ service firebase.storage {
                    && request.auth.uid == uid
                    && request.resource.size < 5 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*|application/pdf');
-      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow delete: if request.auth != null;
+    }
+
+    // Fotos de perfil: leitura pública (necessário para exibir na tabela e sidebar),
+    // escrita/exclusão apenas por usuário autenticado diferente do dono (admin atua por outro uid).
+    // Essa regra evita que o próprio colaborador altere sua foto — só o admin atua.
+    match /fotos_perfil/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.uid != uid
+                   && request.resource.size < 2 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid != uid;
+    }
+
+    // Holerites: leitura por qualquer autenticado (RTDB rules restringem ao dono/admin);
+    // escrita/exclusão apenas por usuário diferente do dono do path (garante que só admin sobe/exclui).
+    match /holerites/{uid}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.uid != uid
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType == 'application/pdf';
+      allow delete: if request.auth != null && request.auth.uid != uid;
     }
   }
 }

@@ -7,6 +7,8 @@ window.fbAuth = firebase.auth();
 window.fbDb = firebase.database();
 window.fbStorage = firebase.storage();
 
+// Persistência de sessão: mantém o usuário logado mesmo offline (salvo em localStorage)
+try { window.fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) {}
 try { window.fbDb.goOnline(); } catch (e) {}
 
 // App secundario (usado pelo admin pra criar usuarios sem deslogar a si mesmo)
