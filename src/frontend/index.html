@@ -105,6 +105,11 @@
             <div class="user-role" id="user-role">-</div>
           </div>
         </div>
+        <button id="toggle-alarme-almoco" class="func-only alarme-toggle-btn">
+          <span>&#128276;</span>
+          <span class="alarme-toggle-label">Alarme de almoço</span>
+          <span class="nav-switch" id="nav-switch-alarme"><span class="nav-switch-dot"></span></span>
+        </button>
       </div>
       <nav class="sidebar-nav">
         <div class="nav-section">Principal</div>
@@ -127,13 +132,6 @@
         <a href="#" data-page="meus-abonos" class="func-only"><span class="icon">&#128203;</span> Meus Abonos</a>
         <a href="#" data-page="minhas-ausencias" class="func-only"><span class="icon">&#128339;</span> Minhas Saídas</a>
         <a href="#" data-page="meu-holerite" class="func-only"><span class="icon">&#128176;</span> Meu Holerite <span id="sidebar-badge-holerite" style="display:none;background:#ed3c0d;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:50px;margin-left:4px;vertical-align:middle;font-family:'Roboto',sans-serif;"></span></a>
-
-        <div class="nav-section func-only">Preferências</div>
-        <a href="#" id="toggle-alarme-almoco" class="func-only nav-toggle">
-          <span class="icon">&#128276;</span>
-          <span style="flex:1;">Alarme de almoço</span>
-          <span class="nav-switch" id="nav-switch-alarme"><span class="nav-switch-dot"></span></span>
-        </a>
 
         <div class="nav-section func-only">Ajuda</div>
         <a href="#" data-page="ajuda" class="func-only"><span class="icon">&#10067;</span> Como usar o sistema</a>
@@ -496,7 +494,7 @@
                 <h2>&#128276; 9. Alarme de Almoço</h2>
                 <p>Para não perder a hora de bater o retorno do almoço, o sistema tem um alarme sonoro opcional.</p>
                 <ol>
-                  <li>No menu lateral, seção <strong>Preferências</strong>, clique em <strong>"Alarme de almoço"</strong> para ativar (o indicador azul acende).</li>
+                  <li>No cabeçalho do menu lateral (abaixo do seu nome), clique em <strong>"Alarme de almoço"</strong> para ativar (o indicador azul acende).</li>
                   <li>Depois que você bater a <strong>saída do almoço</strong>, o alarme é armado automaticamente.</li>
                   <li>Faltando <strong>1 minuto</strong> para completar os 60 min obrigatórios (ou seja, 59 min após a saída), o áudio começa a tocar em loop e um banner vermelho aparece no topo.</li>
                   <li>O som só para quando você <strong>bater o retorno do almoço</strong> — ou clicar em <strong>Silenciar</strong>.</li>

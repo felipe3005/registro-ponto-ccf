@@ -3081,7 +3081,7 @@ document.getElementById('abonos-filtro-status').addEventListener('change', loadA
 document.getElementById('abonos-filtro-tipo').addEventListener('change', loadAbonosAdmin);
 
 // ==================== APP VERSION ====================
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 
 async function loadAppVersion() {
   const el = document.getElementById('app-version');
@@ -3657,13 +3657,10 @@ function _alarmeIniciar() {
   _alarmeVerificar();
 }
 
-// Toggle no menu lateral
-document.getElementById('toggle-alarme-almoco').addEventListener('click', async (e) => {
-  e.preventDefault();
+document.getElementById('toggle-alarme-almoco').addEventListener('click', async () => {
   const novoEstado = !_alarmeAtivo();
   _alarmeSetAtivo(novoEstado);
   if (novoEstado) {
-    // Tenta "desbloquear" imediatamente usando o próprio clique
     const audio = document.getElementById('alarme-almoco-audio');
     if (audio) {
       const origVol = audio.volume;
@@ -3676,7 +3673,7 @@ document.getElementById('toggle-alarme-almoco').addEventListener('click', async 
   } else {
     _alarmePararSom();
     _alarmeSilenciadoRegId = null;
-    toast('Alarme de almoço desativado.', 'info');
+    toast('Alarme de almoço desativado.', 'error');
   }
 });
 
