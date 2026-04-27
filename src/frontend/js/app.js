@@ -217,6 +217,7 @@ function showLogin() {
   if (_holeriteRef) { _holeriteRef.off(); _holeriteRef = null; }
   if (_holeriteAdminRef) { _holeriteAdminRef.off(); _holeriteAdminRef = null; }
   if (_pendingCounterRef) { _pendingCounterRef.off(); _pendingCounterRef = null; }
+  if (_abonosAdminRef) { _abonosAdminRef.off(); _abonosAdminRef = null; }
   if (_ausenciaAbertaRef) { _ausenciaAbertaRef.off(); _ausenciaAbertaRef = null; }
   if (_ausenciaAdminRef) { _ausenciaAdminRef.off(); _ausenciaAdminRef = null; }
   // Para o alarme de almoço e seu timer
@@ -279,6 +280,26 @@ function showApp() {
       });
       _updateSidebarBadgeAusencias(count);
     });
+    // Listener em tempo real para badge de ajustes pendentes (admin) — persistente em toda a sessão
+    if (_pendingCounterRef) _pendingCounterRef.off();
+    _pendingCounterRef = fbDb.ref('ajustes');
+    _pendingCounterRef.on('value', snap => {
+      let count = 0;
+      snap.forEach(c => { if (c.val()?.status === 'pendente') count++; });
+      _ajustesPendentesCount = count;
+      const el = document.getElementById('val-ajustes-pendentes');
+      if (el) el.textContent = count;
+      _ajustesBadgeRecalc();
+    });
+    // Listener em tempo real para badge de abonos pendentes (admin) — persistente em toda a sessão
+    if (_abonosAdminRef) _abonosAdminRef.off();
+    _abonosAdminRef = fbDb.ref('abonos');
+    _abonosAdminRef.on('value', snap => {
+      let count = 0;
+      snap.forEach(c => { if (c.val()?.status === 'pendente') count++; });
+      _abonosPendentesCount = count;
+      _abonosBadgeRecalc();
+    });
   }
 
   // Nav events
@@ -301,17 +322,21 @@ function showApp() {
 
 // ==================== NAVIGATION ====================
 function navigateTo(page) {
-  // Desanexar listener de ajustes pendentes ao sair da dashboard
-  if (page !== 'dashboard' && _pendingCounterRef) {
-    _pendingCounterRef.off();
-    _pendingCounterRef = null;
-  }
   // Desanexar listener de holerites ao sair da página admin
   if (page !== 'holerites-admin' && _holeriteAdminRef) {
     _holeriteAdminRef.off();
     _holeriteAdminRef = null;
   }
-  // Nota: _ausenciaAdminRef permanece ativo em toda a sessão admin para o badge funcionar
+  // Limpa badge de ajustes/abonos quando admin entra na respectiva página
+  if (page === 'ajustes-admin') {
+    localStorage.setItem('ajustes_seen_count', String(_ajustesPendentesCount));
+    _updateSidebarBadgeAjustes(0);
+  }
+  if (page === 'abonos-admin') {
+    localStorage.setItem('abonos_seen_count', String(_abonosPendentesCount));
+    _updateSidebarBadgeAbonos(0);
+  }
+  // Nota: _pendingCounterRef, _abonosAdminRef e _ausenciaAdminRef permanecem ativos em toda a sessão admin
   currentPage = page;
   document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
   document.getElementById(`page-${page}`).classList.remove('hidden');
@@ -364,11 +389,14 @@ let _espelhoFuncId = null; // uid do colaborador sendo visualizado no espelho
 let _ajusteContexto = 'dashboard'; // 'dashboard' | 'espelho'
 let _espelhoCache = null;
 let _espelhoSaldoCache = null;
-let _pendingCounterRef = null;  // listener tempo real do contador de ajustes pendentes
+let _pendingCounterRef = null;  // listener tempo real do contador de ajustes pendentes (admin)
+let _abonosAdminRef = null;     // listener tempo real do contador de abonos pendentes (admin)
 let _holeriteRef = null;        // listener tempo real do badge de holerites (colaborador)
 let _holeriteAdminRef = null;   // listener tempo real do painel de holerites (admin)
 let _ausenciaAdminRef = null;   // listener tempo real do contador de ausências intermediárias (admin)
 let _ausenciaAbertaRef = null;  // listener tempo real da ausência em aberto do colaborador
+let _ajustesPendentesCount = 0; // total atual de ajustes pendentes (admin)
+let _abonosPendentesCount = 0;  // total atual de abonos pendentes (admin)
 
 // ==================== DASHBOARD ====================
 async function loadDashboard() {
@@ -422,6 +450,31 @@ function _updateSidebarBadgeAjustes(count) {
   if (!badge) return;
   if (count > 0) { badge.textContent = count; badge.style.display = 'inline-block'; }
   else { badge.style.display = 'none'; }
+}
+
+function _updateSidebarBadgeAbonos(count) {
+  const badge = document.getElementById('sidebar-badge-abonos');
+  if (!badge) return;
+  if (count > 0) { badge.textContent = count; badge.style.display = 'inline-block'; }
+  else { badge.style.display = 'none'; }
+}
+
+function _ajustesBadgeRecalc() {
+  let seen = parseInt(localStorage.getItem('ajustes_seen_count') || '0', 10);
+  if (seen > _ajustesPendentesCount) {
+    seen = _ajustesPendentesCount;
+    localStorage.setItem('ajustes_seen_count', String(seen));
+  }
+  _updateSidebarBadgeAjustes(_ajustesPendentesCount > seen ? _ajustesPendentesCount : 0);
+}
+
+function _abonosBadgeRecalc() {
+  let seen = parseInt(localStorage.getItem('abonos_seen_count') || '0', 10);
+  if (seen > _abonosPendentesCount) {
+    seen = _abonosPendentesCount;
+    localStorage.setItem('abonos_seen_count', String(seen));
+  }
+  _updateSidebarBadgeAbonos(_abonosPendentesCount > seen ? _abonosPendentesCount : 0);
 }
 
 function _updateSidebarBadgeHolerite(count) {
@@ -626,24 +679,10 @@ async function loadDashboardAdmin() {
       </div>
     `;
 
-    // ---- Contador de ajustes pendentes: query dedicada + listener em tempo real ----
-    // Atualiza imediatamente com a mesma query da página de ajustes (garante consistência)
-    api.ajustesPendentes().then(arr => {
-      const el = document.getElementById('val-ajustes-pendentes');
-      if (el) el.textContent = arr.length;
-      _updateSidebarBadgeAjustes(arr.length);
-    }).catch(() => {});
-
-    // Listener em tempo real para manter atualizado enquanto na dashboard
-    if (_pendingCounterRef) _pendingCounterRef.off();
-    _pendingCounterRef = fbDb.ref('ajustes');
-    _pendingCounterRef.on('value', snap => {
-      let count = 0;
-      snap.forEach(c => { if (c.val()?.status === 'pendente') count++; });
-      const el = document.getElementById('val-ajustes-pendentes');
-      if (el) el.textContent = count;
-      _updateSidebarBadgeAjustes(count);
-    });
+    // Contador de ajustes pendentes do stat card é atualizado pelo listener persistente
+    // em showApp() que escreve em #val-ajustes-pendentes e dispara _ajustesBadgeRecalc.
+    const _statCardAjustes = document.getElementById('val-ajustes-pendentes');
+    if (_statCardAjustes) _statCardAjustes.textContent = _ajustesPendentesCount;
 
     // ---- Gráfico: Presença diária ----
     if (chartPresenca) chartPresenca.destroy();
@@ -1564,6 +1603,16 @@ async function loadEspelho(funcionarioId) {
       const atestadoCell = `<span style="color:#b45309;font-style:italic;font-size:12px;">Atestado</span>`;
       const isHoje = d.data === todayISO;
       const _col = (val) => isDescanso ? descansoCell : (d.atestadoDiaInteiro ? atestadoCell : (val || '-'));
+      const _colEditable = (tipo) => {
+        if (isDescanso) return descansoCell;
+        if (d.atestadoDiaInteiro) return atestadoCell;
+        const val = d[tipo] || '';
+        if (isAdmin && !isOwnEspelho) {
+          const display = val || `<span class="editable-add">+</span>`;
+          return `<span class="editable-time" data-uid="${funcId}" data-data="${d.data}" data-tipo="${tipo}" data-val="${val}" title="Clique para editar">${display}</span>`;
+        }
+        return val || '-';
+      };
 
       const horasTrabalhadasCell = isDescanso ? descansoCell : `<strong>${d.trabalhado}</strong>`;
       const abonoCell = isDescanso ? descansoCell : (d.abonoMinutos > 0
@@ -1577,10 +1626,10 @@ async function loadEspelho(funcionarioId) {
       return `<tr class="${trClass}">
         <td>${dataFormatada}</td>
         <td>${diaSemana}</td>
-        <td>${_col(d.entrada)}</td>
-        <td>${_col(d.saida_almoco)}</td>
-        <td>${_col(d.retorno_almoco)}</td>
-        <td>${_col(d.saida)}</td>
+        <td>${_colEditable('entrada')}</td>
+        <td>${_colEditable('saida_almoco')}</td>
+        <td>${_colEditable('retorno_almoco')}</td>
+        <td>${_colEditable('saida')}</td>
         <td>${horasTrabalhadasCell}</td>
         <td>${abonoCell}</td>
         <td>${totalCell}</td>
@@ -1617,6 +1666,70 @@ async function loadEspelho(funcionarioId) {
 document.getElementById('btn-gerar-espelho').addEventListener('click', () => loadEspelho());
 
 document.getElementById('btn-exportar-pdf').addEventListener('click', () => gerarEspelhoPDF());
+
+// ─── Edição inline de horários no espelho (admin visualizando colaborador) ───
+const _ESPELHO_TIPO_LABEL = { entrada: 'Entrada', saida_almoco: 'Saída Almoço', retorno_almoco: 'Retorno Almoço', saida: 'Saída' };
+
+async function _editarHorarioEspelho(uid, data, tipo, novaHora) {
+  const dia = (_espelhoCache?.dias || []).find(d => d.data === data);
+  if (!dia) { toast('Recarregue o espelho e tente novamente.', 'error'); return; }
+  const valAtual = dia[tipo] || '';
+  const novo = (novaHora || '').trim();
+  if (novo === valAtual) return;
+  if (!novo && valAtual) {
+    const ok = await showConfirm(
+      `Apagar registro de ${_ESPELHO_TIPO_LABEL[tipo]} de ${data.split('-').reverse().join('/')}?`,
+      { title: '⚠️ Confirmar exclusão', okText: 'Apagar', variant: 'danger' }
+    );
+    if (!ok) { loadEspelho(_espelhoFuncId); return; }
+  }
+  const ajustes = {
+    entrada: dia.entrada || '',
+    saida_almoco: dia.saida_almoco || '',
+    retorno_almoco: dia.retorno_almoco || '',
+    saida: dia.saida || ''
+  };
+  ajustes[tipo] = novo;
+  try {
+    await api.ajustarPontoAdmin(uid, data, ajustes);
+    toast(`${_ESPELHO_TIPO_LABEL[tipo]} ${novo ? 'atualizada' : 'apagada'} com sucesso!`, 'success');
+    loadEspelho(_espelhoFuncId);
+  } catch (err) {
+    toast(err.message || 'Erro ao atualizar horário', 'error');
+    loadEspelho(_espelhoFuncId);
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const span = e.target.closest('.editable-time');
+  if (!span) return;
+  if (span.querySelector('input')) return;
+  const { uid, data, tipo, val } = span.dataset;
+  const original = val || '';
+  const input = document.createElement('input');
+  input.type = 'time';
+  input.value = original;
+  input.className = 'editable-time-input';
+  span.innerHTML = '';
+  span.appendChild(input);
+  input.focus();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return;
+    done = true;
+    const novaHora = input.value;
+    if (!commit || novaHora === original) {
+      span.innerHTML = original || `<span class="editable-add">+</span>`;
+      return;
+    }
+    _editarHorarioEspelho(uid, data, tipo, novaHora);
+  };
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+  });
+});
 
 // ==================== FUNCIONÁRIOS ====================
 async function loadFuncionarios() {
@@ -3081,7 +3194,7 @@ document.getElementById('abonos-filtro-status').addEventListener('change', loadA
 document.getElementById('abonos-filtro-tipo').addEventListener('change', loadAbonosAdmin);
 
 // ==================== APP VERSION ====================
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.5.0';
 
 async function loadAppVersion() {
   const el = document.getElementById('app-version');

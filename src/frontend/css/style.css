@@ -723,6 +723,21 @@ tr.espelho-descanso td { background: #f0f0f0; color: #888; font-weight: 600; fon
 tr.espelho-descanso .badge { font-size: 8.66px; padding: 3.15px 8.4px; }
 tr.espelho-feriado td { background: #fffde7; color: #7c6300; font-weight: 600; }
 tr.espelho-feriado .badge { font-size: 8.66px; padding: 3.15px 8.4px; }
+
+.editable-time {
+  display: inline-block; min-width: 44px; padding: 3px 8px;
+  border: 1px dashed #c9d3e3; border-radius: 6px; background: #f8fbff;
+  cursor: pointer; transition: background .15s, border-color .15s;
+  font-variant-numeric: tabular-nums;
+}
+.editable-time:hover { background: #e7f1ff; border-color: #01AEEF; }
+.editable-time .editable-add { color: #01AEEF; font-weight: 700; font-size: 14px; }
+.editable-time-input {
+  width: 80px; padding: 2px 4px;
+  border: 1px solid #01AEEF; border-radius: 5px;
+  font-size: 13px; font-family: inherit;
+  background: #fff; outline: none;
+}
 .espelho-header .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .espelho-header .info-item { font-size: 14px; font-family: "Open Sans", sans-serif; }
 .espelho-header .info-item strong { color: var(--ccf-blue); font-family: "Roboto", sans-serif; }
