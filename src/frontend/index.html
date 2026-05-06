@@ -240,7 +240,7 @@
               <button class="btn-ponto" id="btn-registrar-ponto">Registrar Entrada</button>
               <div class="ponto-tipo" id="ponto-tipo-info"></div>
               <div id="ponto-saida-intermediaria-wrap" style="margin-top:14px;"></div>
-              <div class="registros-hoje" id="ponto-registros-hoje"></div>
+              <div id="ponto-registros-hoje"></div>
               <div id="ponto-ausencias-hoje" style="margin-top:16px;"></div>
             </div>
           </div>
@@ -370,7 +370,12 @@
                   <li>Ao voltar do almoço, aguarde os <strong>60 minutos mínimos</strong> (o próprio botão mostra o contador) e clique em <strong>"Registrar Retorno Almoço"</strong>.</li>
                   <li>No final do expediente, clique em <strong>"Registrar Saída"</strong>.</li>
                 </ol>
-                <p>Você consegue ver os 4 horários batidos logo abaixo do botão, junto com ícones de relógio/almoço/retorno/saída.</p>
+
+                <h3 style="font-size:15px;margin:16px 0 8px;">Cards de horários</h3>
+                <p>Logo abaixo do botão ficam os <strong>4 cards</strong> com os horários do dia (☀️ Entrada · 🍴 Saída Almoço · ☕ Retorno Almoço · 🌙 Saída). O card da etapa em que você está no momento fica <strong>destacado em azul</strong> e levemente elevado — assim você sabe com um olhar rápido em que ponto do dia está.</p>
+
+                <h3 style="font-size:15px;margin:16px 0 8px;">&#128274; Trava de 30 minutos após a entrada</h3>
+                <p>Depois de bater a <strong>Entrada</strong>, o botão fica bloqueado por <strong>30 minutos</strong> e exibe uma contagem regressiva (<em>🔒 Bloqueado — 29:59</em>). Isso evita que o próximo ponto seja registrado acidentalmente logo em seguida. Quando o contador chegar a zero, o botão libera automaticamente.</p>
                 <div class="help-tip">
                   <strong>&#9888; Atenção:</strong> cada tipo só pode ser registrado <strong>uma vez por dia</strong>. Se bateu errado, abra <em>Meus Ajustes</em> e peça correção.
                 </div>
@@ -378,9 +383,9 @@
 
               <section id="help-saida-interm" class="help-section">
                 <h2>&#128339; 2. Saída Intermediária (compromisso)</h2>
-                <p>Precisou sair no meio do expediente para uma consulta, ir ao banco, cartório ou qualquer compromisso? Use o botão <strong>"Registrar Saída Intermediária"</strong> que aparece na tela <em>Registrar Ponto</em>.</p>
+                <p>Precisou sair no meio do expediente para uma consulta, ir ao banco, cartório ou qualquer compromisso? Use o botão roxo <strong>"🚶 Registrar Saída Intermediária (compromisso)"</strong> que aparece na tela <em>Registrar Ponto</em>.</p>
                 <ol>
-                  <li>Clique em <strong>"&#128339; Registrar Saída Intermediária"</strong> (ele só aparece enquanto você está trabalhando).</li>
+                  <li>Clique no botão roxo <strong>"🚶 Registrar Saída Intermediária"</strong> (ele só aparece enquanto você está trabalhando).</li>
                   <li>Informe um <strong>motivo</strong> curto e objetivo (ex.: <em>Consulta médica</em>, <em>Banco</em>, <em>Cartório</em>).</li>
                   <li>Ao voltar, clique em <strong>"Registrar Retorno"</strong> no banner laranja. O sistema calcula a duração da ausência.</li>
                 </ol>
@@ -522,6 +527,7 @@
               <section id="help-regras" class="help-section">
                 <h2>&#128203; 11. Regras e Limites</h2>
                 <ul>
+                  <li><strong>Trava após entrada:</strong> após registrar a Entrada, o botão fica bloqueado por <strong>30 minutos</strong> para evitar registro acidental do próximo ponto. O contador aparece no próprio botão.</li>
                   <li><strong>Almoço mínimo:</strong> 60 minutos entre a saída do almoço e o retorno.</li>
                   <li><strong>Abono de tolerância diária:</strong> valor definido pelo admin em seu perfil (ex.: 10-20 min). Se você chega um pouco depois ou sai um pouco antes dentro dessa janela, o sistema não conta como déficit.</li>
                   <li><strong>Jornada:</strong> calculada a partir da sua jornada semanal ÷ 5 (ex.: 44h/sem = 8h48/dia).</li>
@@ -551,6 +557,10 @@
                   <details>
                     <summary>Saí do escritório e esqueci de registrar a saída intermediária. O que acontece?</summary>
                     <p>O admin pode <strong>lançar a ausência retroativa</strong> por você, e nesse caso o padrão é <em>descontar do banco de horas</em>. Se houver justificativa (atestado, compromisso autorizado, etc.), apresente o documento ou fale com seu gestor — ele pode reclassificar como abonada e o saldo volta ao normal.</p>
+                  </details>
+                  <details>
+                    <summary>Registrei a entrada e o botão travou com uma contagem regressiva. Por quê?</summary>
+                    <p>Após bater a Entrada, o sistema bloqueia o botão por <strong>30 minutos</strong> automaticamente para evitar que o próximo ponto seja registrado sem querer. O próprio botão mostra o tempo restante (<em>🔒 Bloqueado — 29:59</em>). Quando o contador chegar a zero, o botão libera e você pode prosseguir normalmente.</p>
                   </details>
                   <details>
                     <summary>O sistema diz "almoço mínimo de 60 minutos" e trava o botão. Por quê?</summary>

@@ -220,7 +220,8 @@ function showLogin() {
   if (_abonosAdminRef) { _abonosAdminRef.off(); _abonosAdminRef = null; }
   if (_ausenciaAbertaRef) { _ausenciaAbertaRef.off(); _ausenciaAbertaRef = null; }
   if (_ausenciaAdminRef) { _ausenciaAdminRef.off(); _ausenciaAdminRef = null; }
-  // Para o alarme de almoço e seu timer
+  if (almocoLockInterval) { clearInterval(almocoLockInterval); almocoLockInterval = null; }
+  if (entradaLockInterval) { clearInterval(entradaLockInterval); entradaLockInterval = null; }
   if (_alarmeCheckInterval) { clearInterval(_alarmeCheckInterval); _alarmeCheckInterval = null; }
   _alarmePararSom();
 }
@@ -946,7 +947,9 @@ function updateClock() {
 }
 
 const ALMOCO_MINIMO_MINUTOS = 60;
+const ENTRADA_LOCK_MINUTOS = 30;
 let almocoLockInterval = null;
+let entradaLockInterval = null;
 
 function aplicarTravaAlmoco(btn, info, proximoTipo, saidaAlmocoTs, labelRegistro, sufixoInfo) {
   // Limpa interval anterior
@@ -977,6 +980,39 @@ function aplicarTravaAlmoco(btn, info, proximoTipo, saidaAlmocoTs, labelRegistro
   atualizar();
   almocoLockInterval = setInterval(atualizar, 1000);
   return true;
+}
+
+function aplicarTravaEntrada(btn, info, proximoTipo, entradaTs, labelRegistro, sufixoInfo) {
+  if (entradaLockInterval) { clearInterval(entradaLockInterval); entradaLockInterval = null; }
+  if (proximoTipo !== 'saida_almoco' || !entradaTs) return false;
+
+  const entradaMs = new Date(entradaTs).getTime();
+  const liberaMs = entradaMs + ENTRADA_LOCK_MINUTOS * 60 * 1000;
+
+  function atualizar() {
+    const agora = Date.now();
+    const restanteMs = liberaMs - agora;
+    if (restanteMs <= 0) {
+      btn.disabled = false;
+      btn.textContent = labelRegistro;
+      info.textContent = `Próximo registro: saída para almoço${sufixoInfo}`;
+      if (entradaLockInterval) { clearInterval(entradaLockInterval); entradaLockInterval = null; }
+      return;
+    }
+    const totalSeg = Math.ceil(restanteMs / 1000);
+    const min = Math.floor(totalSeg / 60);
+    const seg = totalSeg % 60;
+    btn.disabled = true;
+    btn.textContent = `🔒 Bloqueado — ${pad(min)}:${pad(seg)}`;
+    info.textContent = `🔒 Entrada registrada. Próximo registro liberado em ${pad(min)}:${pad(seg)}${sufixoInfo}`;
+  }
+
+  atualizar();
+  if (liberaMs > Date.now()) {
+    entradaLockInterval = setInterval(atualizar, 1000);
+    return true;
+  }
+  return false;
 }
 
 async function loadRegistrosPonto() {
@@ -1036,13 +1072,20 @@ async function loadRegistrosPonto() {
         btn.classList.add(proximoTipo);
         info.textContent = `Próximo registro: ${proximoTipo.replace(/_/g, ' ')}`;
 
-        // Trava de 1h de almoço (busca saida_almoco do servidor ou fila offline)
+        // Trava de 60 min de almoço
         let saidaAlmocoTs = data.saidaAlmoco || null;
         if (!saidaAlmocoTs) {
           const off = offlineHoje.find(r => r.tipo === 'saida_almoco');
           if (off) saidaAlmocoTs = off.data_hora;
         }
         aplicarTravaAlmoco(btn, info, proximoTipo, saidaAlmocoTs, labels[proximoTipo], '');
+        // Trava de 30 min após entrada
+        let entradaTs = data.entradaTs || null;
+        if (!entradaTs) {
+          const offE = offlineHoje.find(r => r.tipo === 'entrada');
+          if (offE) entradaTs = offE.data_hora;
+        }
+        aplicarTravaEntrada(btn, info, proximoTipo, entradaTs, labels[proximoTipo], '');
       }
 
       // Registros do dia (servidor + offline)
@@ -1082,11 +1125,12 @@ async function loadRegistrosPonto() {
     btn.classList.add(proximoTipo);
     info.textContent = `Próximo registro: ${proximoTipo.replace(/_/g, ' ')} (offline)`;
 
-    // Trava de 1h de almoço no modo offline
+    // Trava de 60 min de almoço (offline)
     const offSaida = offlineHoje.find(r => r.tipo === 'saida_almoco');
-    if (offSaida) {
-      aplicarTravaAlmoco(btn, info, proximoTipo, offSaida.data_hora, labels[proximoTipo], ' (offline)');
-    }
+    if (offSaida) aplicarTravaAlmoco(btn, info, proximoTipo, offSaida.data_hora, labels[proximoTipo], ' (offline)');
+    // Trava de 30 min após entrada (offline)
+    const offEntrada = offlineHoje.find(r => r.tipo === 'entrada');
+    if (offEntrada) aplicarTravaEntrada(btn, info, proximoTipo, offEntrada.data_hora, labels[proximoTipo], ' (offline)');
   }
 
   // Renderizar registros offline
@@ -1158,24 +1202,32 @@ document.getElementById('btn-registrar-ponto').addEventListener('click', async (
 });
 
 function renderRegistrosDia(registros) {
+  const ORDEM = ['entrada', 'saida_almoco', 'retorno_almoco', 'saida'];
   const tipos = {
-    'entrada': { label: 'Entrada', icon: '&#x2600;' },
-    'saida_almoco': { label: 'Saída Almoço', icon: '&#127860;' },
-    'retorno_almoco': { label: 'Retorno Almoço', icon: '&#9749;' },
-    'saida': { label: 'Saída', icon: '&#127769;' }
+    'entrada':        { label: 'Entrada',        icon: '☀️' },
+    'saida_almoco':   { label: 'Saída Almoço',   icon: '🍴' },
+    'retorno_almoco': { label: 'Retorno Almoço', icon: '☕' },
+    'saida':          { label: 'Saída',           icon: '🌙' }
   };
 
   const regs = {};
   registros.forEach(r => { regs[r.tipo] = r; });
 
+  // Último tipo concluído = etapa em que o colaborador está no momento
+  let tipoAtivo = null;
+  for (const t of ORDEM) { if (regs[t]) tipoAtivo = t; }
+
   return `<div class="registros-hoje">
-    ${Object.entries(tipos).map(([tipo, info]) => {
+    ${ORDEM.map(tipo => {
+      const info = tipos[tipo];
       const reg = regs[tipo];
       const hora = reg ? new Date(reg.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-      const offlineTag = reg && reg._offline ? ' <span class="badge badge-warning" style="font-size:10px;">offline</span>' : '';
-      return `<div class="registro-item">
-        <div class="label">${info.icon} ${info.label}</div>
-        <div class="hora ${reg ? '' : 'pending'}">${hora}${offlineTag}</div>
+      const offlineTag = reg?._offline ? ' <span class="badge badge-warning" style="font-size:9px;">offline</span>' : '';
+      const ativoCls = tipo === tipoAtivo ? ' ativo' : '';
+      return `<div class="registro-item${ativoCls}">
+        <div class="ri-icon">${info.icon}</div>
+        <div class="ri-label">${info.label}</div>
+        <div class="ri-hora${reg ? '' : ' pending'}">${hora}${offlineTag}</div>
       </div>`;
     }).join('')}
   </div>`;
@@ -1225,8 +1277,8 @@ async function _renderSaidaIntermediariaPonto() {
       btn.addEventListener('click', () => _registrarRetornoIntermediario(aberta.id));
     } else if (trabalhando) {
       wrap.innerHTML = `
-        <button class="btn btn-sm btn-secondary" id="btn-abrir-saida-intermediaria" style="width:100%;padding:10px;">
-          🚶 Registrar Saída Intermediária (compromisso)
+        <button class="btn-saida-intermediaria" id="btn-abrir-saida-intermediaria">
+          🚶 Registrar Saída Intermediária <span style="opacity:.8;font-size:12px;">(compromisso)</span>
         </button>`;
       document.getElementById('btn-abrir-saida-intermediaria').addEventListener('click', _abrirModalSaidaIntermediaria);
     } else {
@@ -3194,7 +3246,7 @@ document.getElementById('abonos-filtro-status').addEventListener('change', loadA
 document.getElementById('abonos-filtro-tipo').addEventListener('change', loadAbonosAdmin);
 
 // ==================== APP VERSION ====================
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.8.0';
 
 async function loadAppVersion() {
   const el = document.getElementById('app-version');

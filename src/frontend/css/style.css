@@ -505,22 +505,51 @@ a:hover { color: var(--ccf-blue-hover); text-decoration: none; }
 }
 
 .registros-hoje {
-  margin-top: 32px; display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;
+  margin-top: 32px; display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;
 }
 .registro-item {
-  text-align: center; padding: 16px 24px; background: var(--gray-100);
-  border-radius: 8px; min-width: 140px;
-  box-shadow: 0 0 29px 0 rgba(68, 88, 144, 0.08);
+  text-align: center; padding: 20px 28px; background: #fff;
+  border-radius: 14px; min-width: 148px;
+  border: 2px solid var(--gray-200);
+  box-shadow: 0 2px 12px rgba(68,88,144,0.07);
+  transition: transform .2s, box-shadow .2s, border-color .2s;
 }
-.registro-item .label {
-  font-size: 12px; color: var(--gray-500); text-transform: uppercase;
-  letter-spacing: .5px; font-weight: 600; font-family: "Roboto", sans-serif;
+.registro-item.ativo {
+  border-color: #01AEEF;
+  background: linear-gradient(135deg, #e8f6ff 0%, #f0faff 100%);
+  box-shadow: 0 6px 24px rgba(1,174,239,0.22);
+  transform: translateY(-3px);
 }
-.registro-item .hora {
-  font-size: 22px; font-weight: 700; color: var(--ccf-blue); margin-top: 4px;
-  font-family: "Roboto", sans-serif;
+.ri-icon {
+  font-size: 26px; line-height: 1; margin-bottom: 6px;
 }
-.registro-item .hora.pending { color: var(--gray-300); }
+.ri-label {
+  font-size: 11px; color: var(--gray-500); text-transform: uppercase;
+  letter-spacing: .6px; font-weight: 700; font-family: "Roboto", sans-serif;
+}
+.registro-item.ativo .ri-label { color: #0D2C64; }
+.ri-hora {
+  font-size: 28px; font-weight: 700; color: var(--ccf-blue); margin-top: 6px;
+  font-family: "Roboto", sans-serif; font-variant-numeric: tabular-nums;
+}
+.registro-item.ativo .ri-hora { color: #01AEEF; }
+.ri-hora.pending { color: var(--gray-300); }
+
+.btn-saida-intermediaria {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 14px 20px; margin-top: 2px;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: #fff; border: none; border-radius: 12px;
+  font-size: 14px; font-weight: 600; font-family: "Roboto", sans-serif;
+  cursor: pointer; letter-spacing: .3px;
+  box-shadow: 0 4px 14px rgba(79,70,229,0.35);
+  transition: filter .18s, transform .18s, box-shadow .18s;
+}
+.btn-saida-intermediaria:hover {
+  filter: brightness(1.1); transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(79,70,229,0.40);
+}
+.btn-saida-intermediaria:active { transform: translateY(0); filter: brightness(.96); }
 
 /*--------------------------------------------------------------
 # Forms

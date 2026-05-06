@@ -437,10 +437,12 @@ class Api {
     const tiposRegistrados = new Set(registros.map(r => r.tipo));
     const proximoTipo = ORDEM.find(t => !tiposRegistrados.has(t)) || null;
     const saidaAlmoco = registros.find(r => r.tipo === 'saida_almoco');
+    const entrada = registros.find(r => r.tipo === 'entrada');
     return {
       ultimoRegistro: registros[registros.length - 1] || null,
       proximoTipo,
       saidaAlmoco: saidaAlmoco ? saidaAlmoco.data_hora : null,
+      entradaTs: entrada ? entrada.data_hora : null,
       almocoMinimoMinutos: 60
     };
   }
