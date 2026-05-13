@@ -3500,7 +3500,7 @@ document.getElementById('abonos-filtro-status').addEventListener('change', loadA
 document.getElementById('abonos-filtro-tipo').addEventListener('change', loadAbonosAdmin);
 
 // ==================== APP VERSION ====================
-const APP_VERSION = '2.16.1';
+const APP_VERSION = '2.16.2';
 
 async function loadAppVersion() {
   const el = document.getElementById('app-version');

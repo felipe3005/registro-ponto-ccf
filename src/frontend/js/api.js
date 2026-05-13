@@ -1431,7 +1431,7 @@ class Api {
       const he = heMap[dataStr] || null;
       if (feriadoNome) status = 'feriado';
       else if (dow === 0 || dow === 6) status = 'fim_de_semana';
-      else if (min === 0 && atestadoEfetivo === 0 && abHoraEfetivo === 0) status = 'falta';
+      else if (!t.entrada && atestadoEfetivo === 0 && abHoraEfetivo === 0) status = 'falta';
       else if (abHoraEfetivo > 0 && effDiff >= 0) status = 'abono_horas';
       else if (atestadoEfetivo > 0 && effDiff >= 0) status = 'atestado';
       else if (effDiff < 0) status = 'incompleto';
