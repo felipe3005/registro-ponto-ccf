@@ -262,7 +262,7 @@ class Api {
 
   async cadastrarFuncionario(dados) {
     await this._requireAdmin();
-    const { nome, usuario, email, senha, cargo, departamento, jornada_semanal, perfil_horario_id, abono_minutos, role } = dados;
+    const { nome, usuario, email, senha, cargo, departamento, jornada_semanal, perfil_horario_id, abono_minutos, role, data_aniversario } = dados;
     if (!nome || !usuario || !senha) throw new Error('Nome, usuário e senha são obrigatórios');
 
     const usuarioLower = usuario.toLowerCase().trim();
@@ -292,6 +292,7 @@ class Api {
       jornada_semanal: jornada_semanal || 44,
       perfil_horario_id: perfil_horario_id || null,
       abono_minutos: abono_minutos || 0,
+      data_aniversario: data_aniversario || null,
       role: role || 'funcionario',
       ativo: true,
       senha_temporaria: true,
@@ -308,7 +309,7 @@ class Api {
   async editarFuncionario(id, dados) {
     await this._requireAdmin();
     const updates = {};
-    const fields = ['nome', 'email', 'cargo', 'departamento', 'jornada_semanal', 'perfil_horario_id', 'abono_minutos', 'role', 'foto_url'];
+    const fields = ['nome', 'email', 'cargo', 'departamento', 'jornada_semanal', 'perfil_horario_id', 'abono_minutos', 'role', 'foto_url', 'data_aniversario'];
     fields.forEach(f => {
       if (dados[f] !== undefined) updates[f] = dados[f] === null ? null : (dados[f] || null);
     });
@@ -1135,6 +1136,25 @@ class Api {
     return { message: 'Feriado removido' };
   }
 
+  // ==================== ANIVERSARIANTES ====================
+  // Lê de users (campo data_aniversario), opcionalmente mescla com nodo legado "aniversariantes"
+  async listarAniversariantes() {
+    const usersSnap = await fbDb.ref('users').once('value');
+    const arr = [];
+    usersSnap.forEach(c => {
+      const v = c.val() || {};
+      if (v.ativo !== false && v.data_aniversario) {
+        arr.push({ id: c.key, uid: c.key, nome: v.nome || c.key, data: v.data_aniversario });
+      }
+    });
+    arr.sort((a, b) => {
+      const mdA = (a.data || '').substring(5);
+      const mdB = (b.data || '').substring(5);
+      return mdA.localeCompare(mdB);
+    });
+    return arr;
+  }
+
   async buscarTolerancia() {
     const snap = await fbDb.ref('configuracoes/tolerancia_minutos').once('value');
     return { minutos: parseInt(snap.val() || '10') };
@@ -1797,6 +1817,171 @@ class Api {
     const snap = await fbDb.ref(`holerites/${uid}`).once('value');
     const data = snap.val() || {};
     return Object.values(data).filter(h => !h.lido).length;
+  }
+
+  // ==================== DÚVIDAS SOBRE HOLERITE ====================
+
+  async obterDuvidaHolerite(targetUid, holeriteKey) {
+    const meUid = this._currentUid;
+    if (!meUid) throw new Error('Sessão expirada');
+    const isAdmin = await this._isAdmin();
+    if (!isAdmin && meUid !== targetUid) throw new Error('Sem permissão');
+    const snap = await fbDb.ref(`holerites_duvidas/${targetUid}/${holeriteKey}`).once('value');
+    const data = snap.val();
+    if (!data) return null;
+    const mensagens = Object.entries(data.mensagens || {})
+      .map(([id, m]) => ({ id, ...m }))
+      .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+    return {
+      status: data.status || 'aberto',
+      criado_em: data.criado_em || null,
+      fechado_por: data.fechado_por || null,
+      fechado_em: data.fechado_em || null,
+      mensagens
+    };
+  }
+
+  async enviarMensagemDuvida(targetUid, threadKey, holeriteMes, holeriteAno, texto, arquivo, assunto) {
+    const meUid = this._currentUid;
+    if (!meUid) throw new Error('Sessão expirada');
+    const isAdmin = await this._isAdmin();
+    if (!isAdmin && meUid !== targetUid) throw new Error('Sem permissão');
+    if (!texto && !arquivo) throw new Error('Escreva uma mensagem ou anexe um arquivo');
+
+    const role = isAdmin ? 'admin' : 'funcionario';
+    const meSnap = await fbDb.ref(`users/${meUid}`).once('value');
+    const meUser = meSnap.val() || {};
+    const autorNome = meUser.nome || (isAdmin ? 'Administrador' : 'Colaborador');
+
+    let anexo_url = null, anexo_nome = null, anexo_tipo = null;
+    if (arquivo) {
+      if (arquivo.size > 10 * 1024 * 1024) throw new Error('Arquivo muito grande (máx 10 MB)');
+      const safe = arquivo.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      const path = `holerites_duvidas/${targetUid}/${threadKey}/${Date.now()}-${safe}`;
+      const ref = fbStorage.ref(path);
+      await ref.put(arquivo, { contentType: arquivo.type || 'application/octet-stream' });
+      anexo_url = await ref.getDownloadURL();
+      anexo_nome = arquivo.name;
+      anexo_tipo = arquivo.type || '';
+    }
+
+    const baseRef = fbDb.ref(`holerites_duvidas/${targetUid}/${threadKey}`);
+    const existeSnap = await baseRef.once('value');
+    const existe = existeSnap.val();
+
+    const msgRef = baseRef.child('mensagens').push();
+    const msg = {
+      autor_uid: meUid,
+      autor_nome: autorNome,
+      autor_role: role,
+      texto: texto || '',
+      created_at: _nowIso()
+    };
+    if (anexo_url) { msg.anexo_url = anexo_url; msg.anexo_nome = anexo_nome; msg.anexo_tipo = anexo_tipo; }
+
+    const updates = {};
+    if (!existe) {
+      updates[`holerites_duvidas/${targetUid}/${threadKey}/criado_em`] = _nowIso();
+      updates[`holerites_duvidas/${targetUid}/${threadKey}/status`] = 'aberto';
+      updates[`holerites_duvidas/${targetUid}/${threadKey}/colaborador_uid`] = targetUid;
+      if (assunto) updates[`holerites_duvidas/${targetUid}/${threadKey}/assunto`] = assunto;
+      if (holeriteMes) updates[`holerites_duvidas/${targetUid}/${threadKey}/holerite_mes`] = holeriteMes;
+      if (holeriteAno) updates[`holerites_duvidas/${targetUid}/${threadKey}/holerite_ano`] = holeriteAno;
+    }
+    updates[`holerites_duvidas/${targetUid}/${threadKey}/mensagens/${msgRef.key}`] = msg;
+    updates[`holerites_duvidas/${targetUid}/${threadKey}/ultima_atividade`] = _nowIso();
+    updates[`holerites_duvidas/${targetUid}/${threadKey}/unread_admin`] = !isAdmin;
+    updates[`holerites_duvidas/${targetUid}/${threadKey}/unread_colab`] = isAdmin;
+    // Se estava fechado, reabre ao enviar nova mensagem
+    if (existe && existe.status === 'fechado') {
+      updates[`holerites_duvidas/${targetUid}/${threadKey}/status`] = 'aberto';
+      updates[`holerites_duvidas/${targetUid}/${threadKey}/fechado_por`] = null;
+      updates[`holerites_duvidas/${targetUid}/${threadKey}/fechado_em`] = null;
+    }
+    await fbDb.ref().update(updates);
+    return { id: msgRef.key, ...msg };
+  }
+
+  // Gera um novo threadKey para dúvida genérica (sem holerite)
+  novaDuvidaThreadKey(targetUid) {
+    return fbDb.ref(`holerites_duvidas/${targetUid}`).push().key;
+  }
+
+  async mudarStatusDuvida(targetUid, holeriteKey, novoStatus) {
+    const meUid = this._currentUid;
+    if (!meUid) throw new Error('Sessão expirada');
+    const isAdmin = await this._isAdmin();
+    if (!isAdmin && meUid !== targetUid) throw new Error('Sem permissão');
+    if (novoStatus !== 'aberto' && novoStatus !== 'fechado') throw new Error('Status inválido');
+    const updates = {
+      [`holerites_duvidas/${targetUid}/${holeriteKey}/status`]: novoStatus
+    };
+    if (novoStatus === 'fechado') {
+      updates[`holerites_duvidas/${targetUid}/${holeriteKey}/fechado_por`] = meUid;
+      updates[`holerites_duvidas/${targetUid}/${holeriteKey}/fechado_por_role`] = isAdmin ? 'admin' : 'funcionario';
+      updates[`holerites_duvidas/${targetUid}/${holeriteKey}/fechado_em`] = _nowIso();
+    } else {
+      updates[`holerites_duvidas/${targetUid}/${holeriteKey}/fechado_por`] = null;
+      updates[`holerites_duvidas/${targetUid}/${holeriteKey}/fechado_em`] = null;
+    }
+    await fbDb.ref().update(updates);
+  }
+
+  async marcarDuvidaLida(targetUid, holeriteKey) {
+    const meUid = this._currentUid;
+    if (!meUid) return;
+    const isAdmin = await this._isAdmin();
+    const campo = isAdmin ? 'unread_admin' : 'unread_colab';
+    await fbDb.ref(`holerites_duvidas/${targetUid}/${holeriteKey}/${campo}`).set(false);
+  }
+
+  async _isAdmin() {
+    const uid = this._currentUid;
+    if (!uid) return false;
+    const snap = await fbDb.ref(`users/${uid}/role`).once('value');
+    return snap.val() === 'admin';
+  }
+
+  // Lista todas as dúvidas (admin: tudo; colaborador: só as próprias)
+  async listarDuvidas() {
+    const meUid = this._currentUid;
+    if (!meUid) throw new Error('Sessão expirada');
+    const isAdmin = await this._isAdmin();
+    const snap = await fbDb.ref('holerites_duvidas').once('value');
+    const data = snap.val() || {};
+    const itens = [];
+    Object.entries(data).forEach(([uid, byKey]) => {
+      if (!isAdmin && uid !== meUid) return;
+      Object.entries(byKey || {}).forEach(([key, info]) => {
+        if (!info) return;
+        const mensagens = info.mensagens || {};
+        const msgArr = Object.values(mensagens);
+        const ultimaMsg = msgArr.length
+          ? msgArr.reduce((a, b) => (a.created_at || '') > (b.created_at || '') ? a : b)
+          : null;
+        // Detecta se a key é no formato holerite YYYY-MM (legado) ou pushId
+        const keyEhHolerite = /^\d{4}-\d{2}$/.test(key);
+        itens.push({
+          uid,
+          key,
+          assunto: info.assunto || null,
+          mes: info.holerite_mes || (keyEhHolerite ? parseInt(key.split('-')[1], 10) : null),
+          ano: info.holerite_ano || (keyEhHolerite ? parseInt(key.split('-')[0], 10) : null),
+          status: info.status || 'aberto',
+          criado_em: info.criado_em || null,
+          ultima_atividade: info.ultima_atividade || (ultimaMsg ? ultimaMsg.created_at : null),
+          ultima_msg_autor: ultimaMsg ? ultimaMsg.autor_nome : null,
+          ultima_msg_role: ultimaMsg ? ultimaMsg.autor_role : null,
+          total_mensagens: msgArr.length,
+          unread_admin: !!info.unread_admin,
+          unread_colab: !!info.unread_colab,
+          fechado_por_role: info.fechado_por_role || null
+        });
+      });
+    });
+    // Mais recentes primeiro
+    itens.sort((a, b) => (b.ultima_atividade || '').localeCompare(a.ultima_atividade || ''));
+    return itens;
   }
 }
 

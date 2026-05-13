@@ -125,6 +125,7 @@
         <a href="#" data-page="ausencias-admin" class="admin-only"><span class="icon">&#128339;</span> Ausências Intermediárias <span id="sidebar-badge-ausencias" style="display:none;background:#ed3c0d;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:50px;margin-left:4px;vertical-align:middle;font-family:'Roboto',sans-serif;"></span></a>
         <a href="#" data-page="relatorios" class="admin-only"><span class="icon">&#128202;</span> Relat&oacute;rios</a>
         <a href="#" data-page="holerites-admin" class="admin-only"><span class="icon">&#128176;</span> Holerites</a>
+        <a href="#" data-page="duvidas-holerite" class="admin-only"><span class="icon">&#128172;</span> Dúvidas Colaborador <span id="sidebar-badge-duvidas-admin" style="display:none;background:#ed3c0d;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:50px;margin-left:4px;vertical-align:middle;font-family:'Roboto',sans-serif;"></span></a>
         <a href="#" data-page="configuracoes" class="admin-only"><span class="icon">&#9881;</span> Configura&ccedil;&otilde;es</a>
 
         <div class="nav-section func-only">Solicita&ccedil;&otilde;es</div>
@@ -132,6 +133,7 @@
         <a href="#" data-page="meus-abonos" class="func-only"><span class="icon">&#128203;</span> Meus Abonos</a>
         <a href="#" data-page="minhas-ausencias" class="func-only"><span class="icon">&#128339;</span> Minhas Saídas</a>
         <a href="#" data-page="meu-holerite" class="func-only"><span class="icon">&#128176;</span> Meu Holerite <span id="sidebar-badge-holerite" style="display:none;background:#ed3c0d;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:50px;margin-left:4px;vertical-align:middle;font-family:'Roboto',sans-serif;"></span></a>
+        <a href="#" data-page="duvidas-holerite" class="func-only"><span class="icon">&#128172;</span> Minhas Dúvidas <span id="sidebar-badge-duvidas-func" style="display:none;background:#ed3c0d;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:50px;margin-left:4px;vertical-align:middle;font-family:'Roboto',sans-serif;"></span></a>
 
         <div class="nav-section func-only">Ajuda</div>
         <a href="#" data-page="ajuda" class="func-only"><span class="icon">&#10067;</span> Como usar o sistema</a>
@@ -164,6 +166,7 @@
           <div id="dashboard-func" class="hidden">
             <div id="dash-greeting"></div>
             <div id="dash-alertas"></div>
+            <div id="dash-aniversariantes"></div>
             <div id="dash-feriado-prox"></div>
             <div class="card" style="margin-bottom:20px;">
               <div class="card-header">
@@ -181,6 +184,7 @@
 
           <!-- Dashboard do admin -->
           <div id="dashboard-admin" class="hidden">
+            <div id="dash-aniversariantes-admin"></div>
             <div class="stats-grid" id="dashboard-stats-admin"></div>
 
             <div class="grid-2col">
@@ -336,11 +340,12 @@
               <a href="#help-ajustes">5. Solicitar Ajuste</a>
               <a href="#help-abonos">6. Solicitar Abono</a>
               <a href="#help-holerite">7. Meu Holerite</a>
-              <a href="#help-senha">8. Trocar / Recuperar Senha</a>
-              <a href="#help-alarme">9. Alarme de Almoço</a>
-              <a href="#help-offline">10. Modo Offline</a>
-              <a href="#help-regras">11. Regras e Limites</a>
-              <a href="#help-duvidas">Dúvidas frequentes</a>
+              <a href="#help-minhas-duvidas">8. Minhas Dúvidas</a>
+              <a href="#help-senha">9. Trocar / Recuperar Senha</a>
+              <a href="#help-alarme">10. Alarme de Almoço</a>
+              <a href="#help-offline">11. Modo Offline</a>
+              <a href="#help-regras">12. Regras e Limites</a>
+              <a href="#help-faq">Dúvidas frequentes</a>
             </aside>
 
             <!-- Conteúdo -->
@@ -354,7 +359,8 @@
                   <li>Registra compromissos que te façam sair durante o expediente;</li>
                   <li>Acompanha seu banco de horas e o total do mês;</li>
                   <li>Solicita ajuste de horário, atestado médico ou abono de horas;</li>
-                  <li>Recebe e visualiza seus holerites em PDF.</li>
+                  <li>Recebe e visualiza seus holerites em PDF;</li>
+                  <li>Tira dúvidas com o RH pelo chat <strong>Minhas Dúvidas</strong> — holerite, banco de horas, férias, benefícios e muito mais.</li>
                 </ul>
                 <div class="help-tip">
                   <strong>&#128161; Dica:</strong> clique nos itens do menu lateral para navegar entre as telas. Seu horário de trabalho fica registrado em seu <strong>perfil de horário</strong> — fale com o RH se algo estiver errado.
@@ -414,6 +420,7 @@
                   <li><strong>Resumo do mês</strong> (dias presentes, faltas, total trabalhado);</li>
                   <li><strong>Banco de horas acumulado</strong> (positivo ↑ verde, negativo ↓ vermelho);</li>
                   <li><strong>Alertas</strong> de ajustes/abonos pendentes;</li>
+                  <li><strong>🎂 Aniversariantes</strong> — banner rosa pulsante quando é aniversário de alguém da empresa hoje, e um aviso roxo com o próximo aniversariante dos próximos 30 dias;</li>
                   <li><strong>Próximo feriado</strong>, se houver.</li>
                 </ul>
               </section>
@@ -484,10 +491,74 @@
                   <li>O PDF abre dentro do sistema. Use o botão <strong>Baixar</strong> para salvar no seu computador/celular.</li>
                   <li>Depois de aberto, o status vira <span class="badge badge-success">Visto</span>.</li>
                 </ul>
+                <div class="help-tip">
+                  <strong>&#128161; Dica:</strong> tem dúvida sobre um valor do holerite? Use <strong>"💬 Minhas Dúvidas"</strong> no menu lateral — veja a seção 8 abaixo.
+                </div>
+              </section>
+
+              <section id="help-minhas-duvidas" class="help-section">
+                <h2>&#128172; 8. Minhas Dúvidas</h2>
+                <p>Canal direto com o RH para qualquer assunto: holerite, banco de horas, benefícios, férias, atestados, vale-refeição ou qualquer outra questão relacionada ao seu vínculo de trabalho.</p>
+
+                <h3 style="font-size:15px;margin:16px 0 8px;">Como acessar</h3>
+                <p>No menu lateral, clique em <strong>"💬 Minhas Dúvidas"</strong>. Uma <strong>bolinha vermelha com número</strong> aparece nesse item sempre que houver resposta nova aguardando você.</p>
+
+                <h3 style="font-size:15px;margin:16px 0 8px;">Abrir uma nova dúvida</h3>
+                <ol>
+                  <li>Clique em <strong>"+ Nova Dúvida"</strong> no canto superior direito da tela.</li>
+                  <li>Preencha o campo <strong>Assunto</strong> com o tema da sua dúvida (obrigatório). Exemplos:
+                    <ul style="margin-top:6px;">
+                      <li><em>"Dúvida sobre banco de horas de abril"</em></li>
+                      <li><em>"Quando sai meu vale-refeição?"</em></li>
+                      <li><em>"Férias — período e pagamento"</em></li>
+                      <li><em>"Erro no adicional noturno — holerite de maio"</em></li>
+                    </ul>
+                  </li>
+                  <li>Se a dúvida for sobre um <strong>holerite específico</strong>, selecione-o no dropdown <em>"Vincular a um holerite (opcional)"</em>. Caso contrário, deixe em branco.</li>
+                  <li>Clique em <strong>"Abrir Dúvida"</strong> — o chat é criado.</li>
+                </ol>
+
+                <h3 style="font-size:15px;margin:16px 0 8px;">Conversar com o RH</h3>
+                <ol>
+                  <li>Na lista de dúvidas, clique no <strong>Assunto</strong> ou em <strong>"Abrir"</strong> para entrar no chat.</li>
+                  <li>Digite sua mensagem no campo de texto e clique em <strong>"➔ Enviar"</strong>.</li>
+                  <li>Se quiser anexar um comprovante, print ou PDF, clique em <strong>"📎 Anexar arquivo"</strong> (máx. <strong>10 MB</strong>). Imagens e PDFs são aceitos.</li>
+                  <li>Você e o RH podem trocar quantas mensagens precisarem — funciona como um chat.</li>
+                  <li>Quando o RH responder, a <strong>bolinha vermelha</strong> aparece no menu e a linha da dúvida fica destacada.</li>
+                </ol>
+
+                <h3 style="font-size:15px;margin:16px 0 8px;">Finalizar e reabrir</h3>
+                <ul>
+                  <li>Quando o assunto estiver resolvido, clique em <strong>"✕ Finalizar dúvida"</strong>. O status muda para <span class="badge badge-success">Finalizada</span>.</li>
+                  <li>Precisou de mais informação depois? Clique em <strong>"↻ Reabrir dúvida"</strong> — ou simplesmente envie uma nova mensagem (o sistema reabre automaticamente).</li>
+                </ul>
+
+                <h3 style="font-size:15px;margin:16px 0 8px;">O que aparece na lista de dúvidas</h3>
+                <div class="help-grid">
+                  <div class="help-card-small">
+                    <h4>Assunto</h4>
+                    <p>Tema que você definiu ao abrir. Se vinculada a um holerite, aparece um badge azul com o mês.</p>
+                  </div>
+                  <div class="help-card-small">
+                    <h4>Status</h4>
+                    <p><span class="badge badge-warning">Aberta</span> — em andamento. <span class="badge badge-success">Finalizada</span> — resolvida (mas pode ser reaberta).</p>
+                  </div>
+                  <div class="help-card-small">
+                    <h4>Última atividade</h4>
+                    <p>Data e hora da mensagem mais recente no chat.</p>
+                  </div>
+                </div>
+
+                <div class="help-tip">
+                  <strong>&#128161; Dica:</strong> seja específico — cite mês, valor ou data exata. Ex.: <em>"a verba 'Adicional Noturno' de R$ 180 não aparece no holerite de maio"</em>. Quanto mais detalhe, mais rápida a resposta do RH.
+                </div>
+                <div class="help-tip" style="background:#e7f5ea;border-left-color:#2e7d32;color:#1e5a2b;">
+                  <strong>&#9989; Importante:</strong> use <em>Minhas Dúvidas</em> para <strong>qualquer</strong> assunto de RH — não apenas holerite. O RH acompanha todas as dúvidas nesse canal e responde por lá.
+                </div>
               </section>
 
               <section id="help-senha" class="help-section">
-                <h2>&#128274; 8. Trocar / Recuperar Senha</h2>
+                <h2>&#128274; 9. Trocar / Recuperar Senha</h2>
                 <p><strong>Primeiro acesso:</strong> você será obrigado a trocar a senha temporária no primeiro login.</p>
                 <p><strong>Esqueci minha senha:</strong> na tela de login, clique em <em>"Esqueci minha senha"</em>, informe seu usuário. Se houver e-mail cadastrado, um link chega em até alguns minutos (verifique também a caixa de spam). O link expira em <strong>30 minutos</strong>.</p>
                 <div class="help-tip">
@@ -496,7 +567,7 @@
               </section>
 
               <section id="help-alarme" class="help-section">
-                <h2>&#128276; 9. Alarme de Almoço</h2>
+                <h2>&#128276; 10. Alarme de Almoço</h2>
                 <p>Para não perder a hora de bater o retorno do almoço, o sistema tem um alarme sonoro opcional.</p>
                 <ol>
                   <li>No cabeçalho do menu lateral (abaixo do seu nome), clique em <strong>"Alarme de almoço"</strong> para ativar (o indicador azul acende).</li>
@@ -514,7 +585,7 @@
               </section>
 
               <section id="help-offline" class="help-section">
-                <h2>&#128246; 10. Modo Offline</h2>
+                <h2>&#128246; 11. Modo Offline</h2>
                 <p>Sem internet? Calma:</p>
                 <ul>
                   <li>Você consegue <strong>continuar batendo ponto</strong> normalmente — os registros ficam salvos no dispositivo e sincronizam sozinhos quando a conexão volta.</li>
@@ -525,7 +596,7 @@
               </section>
 
               <section id="help-regras" class="help-section">
-                <h2>&#128203; 11. Regras e Limites</h2>
+                <h2>&#128203; 12. Regras e Limites</h2>
                 <ul>
                   <li><strong>Trava após entrada:</strong> após registrar a Entrada, o botão fica bloqueado por <strong>30 minutos</strong> para evitar registro acidental do próximo ponto. O contador aparece no próprio botão.</li>
                   <li><strong>Almoço mínimo:</strong> 60 minutos entre a saída do almoço e o retorno.</li>
@@ -539,7 +610,7 @@
                 </ul>
               </section>
 
-              <section id="help-duvidas" class="help-section">
+              <section id="help-faq" class="help-section">
                 <h2>&#10067; Dúvidas frequentes</h2>
                 <div class="help-faq">
                   <details>
@@ -573,6 +644,14 @@
                   <details>
                     <summary>O link de recuperação de senha não chegou.</summary>
                     <p>Confira a caixa de spam e o e-mail cadastrado (fale com o admin se não tiver certeza de qual está registrado). O link expira em 30 min — pode ser necessário solicitar um novo.</p>
+                  </details>
+                  <details>
+                    <summary>Tenho dúvida sobre um valor do meu holerite. Como pergunto?</summary>
+                    <p>No menu lateral, abra <strong>"💬 Minhas Dúvidas"</strong>, clique em <strong>"+ Nova Dúvida"</strong>, preencha o assunto (ex.: <em>"Erro no adicional noturno — maio"</em>) e, se quiser vincular ao holerite, selecione-o no dropdown opcional. Escreva a pergunta e (se quiser) anexe um arquivo. O RH é avisado e responde no mesmo canal — quando responder, aparece a <strong>bolinha vermelha</strong> ao lado de "Minhas Dúvidas" no menu.</p>
+                  </details>
+                  <details>
+                    <summary>Posso usar "Minhas Dúvidas" para qualquer assunto ou só para holerite?</summary>
+                    <p>Para <strong>qualquer</strong> assunto de RH: banco de horas, férias, benefícios, atestados, vale-refeição, dúvidas trabalhistas, etc. Basta preencher o campo <em>Assunto</em> e enviar. O campo de holerite é totalmente opcional.</p>
                   </details>
                 </div>
               </section>
@@ -914,6 +993,44 @@
         </div>
       </div>
 
+      <!-- DÚVIDAS DE HOLERITE (admin + colaborador) -->
+      <div id="page-duvidas-holerite" class="page hidden">
+        <div class="page-header">
+          <h1>&#128172; <span id="duvidas-page-title">Dúvidas Holerite</span></h1>
+          <div class="ph-logo"><img src="images/logo-420x110.png" alt="CCF"></div>
+          <div class="btn-group" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
+            <select id="duvidas-filtro-status" class="form-control" style="width:auto;min-width:130px;">
+              <option value="">Todos os status</option>
+              <option value="aberto">Aberto</option>
+              <option value="fechado">Fechado</option>
+            </select>
+            <select id="duvidas-filtro-colab" class="form-control admin-only" style="width:auto;min-width:180px;">
+              <option value="">Todos os colaboradores</option>
+            </select>
+            <button class="btn btn-primary func-only" id="btn-nova-duvida">+ Nova Dúvida</button>
+          </div>
+        </div>
+        <div class="page-body">
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr id="duvidas-thead-row">
+                    <th>Assunto</th>
+                    <th class="admin-only">Colaborador</th>
+                    <th>Status</th>
+                    <th>Última atividade</th>
+                    <th>Mensagens</th>
+                    <th>A&ccedil;&otilde;es</th>
+                  </tr>
+                </thead>
+                <tbody id="duvidas-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- MEU HOLERITE (colaborador) -->
       <div id="page-meu-holerite" class="page hidden">
         <div class="page-header">
@@ -1003,9 +1120,16 @@
               <input type="text" id="func-usuario" class="form-control" placeholder="ex: felipe.silva" required>
             </div>
           </div>
-          <div class="form-group">
-            <label>Email (opcional)</label>
-            <input type="email" id="func-email" class="form-control" placeholder="email@empresa.com">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Email (opcional)</label>
+              <input type="email" id="func-email" class="form-control" placeholder="email@empresa.com">
+            </div>
+            <div class="form-group">
+              <label>&#127874; Data de Aniversário</label>
+              <input type="date" id="func-aniversario" class="form-control">
+              <small class="text-muted">Apenas dia/mês são usados para o aviso anual.</small>
+            </div>
           </div>
           <div class="form-group" id="func-senha-group">
             <label>Senha Inicial *</label>
@@ -1130,6 +1254,7 @@
       </div>
     </div>
   </div>
+
 
   <!-- MODAL PERFIL DE HORÁRIO -->
   <div class="modal-overlay" id="modal-perfil-horario">
@@ -1318,6 +1443,88 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" id="btn-confirmar-generico-cancelar">Cancelar</button>
         <button class="btn btn-primary" id="btn-confirmar-generico-ok">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NOVA DÚVIDA (RH em geral) -->
+  <div class="modal-overlay" id="modal-selecionar-holerite-duvida">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h3>&#128172; Nova Dúvida</h3>
+        <button class="modal-close" onclick="closeModal('modal-selecionar-holerite-duvida')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:#555;margin-bottom:12px;">Use este canal para tirar qualquer dúvida com o RH (holerites, banco de horas, atestados, benefícios, férias, etc.).</p>
+        <div class="form-group">
+          <label>Assunto *</label>
+          <input type="text" id="duvida-assunto" class="form-control" placeholder="Ex.: Dúvida sobre banco de horas, Atestado, Vale-refeição..." maxlength="120" required>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Vincular a um holerite (opcional)</label>
+          <select id="select-holerite-duvida" class="form-control">
+            <option value="">Não vincular a holerite</option>
+          </select>
+          <small class="text-muted">Selecione apenas se a dúvida for sobre um holerite específico.</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-selecionar-holerite-duvida')">Cancelar</button>
+        <button class="btn btn-primary" id="btn-abrir-nova-duvida">Continuar &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DÚVIDAS DE HOLERITE -->
+  <div class="modal-overlay" id="modal-duvidas-holerite">
+    <div class="modal" style="max-width:680px;">
+      <div class="modal-header">
+        <h3>&#128172; <span id="duvidas-holerite-titulo">Dúvidas sobre Holerite</span> <span id="duvidas-holerite-status-badge"></span></h3>
+        <button class="modal-close" onclick="closeModal('modal-duvidas-holerite')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="duvidas-info-bar">
+          <small id="duvidas-info-texto">Use este canal para tirar dúvidas sobre valores, horas, benefícios e descontos deste holerite.</small>
+          <button class="btn btn-sm" id="btn-duvida-mudar-status" style="white-space:nowrap;"></button>
+        </div>
+        <div class="duvidas-mensagens" id="duvidas-mensagens-lista">
+          <div class="text-muted text-center" style="padding:32px;">Carregando...</div>
+        </div>
+        <div class="duvidas-input-wrap" id="duvidas-input-wrap">
+          <textarea id="duvida-texto" class="form-control" rows="3" placeholder="Escreva sua dúvida ou resposta..."></textarea>
+          <div class="duvida-anexo-row">
+            <label class="btn btn-sm btn-secondary" style="cursor:pointer;margin:0;">
+              &#128206; Anexar arquivo
+              <input type="file" id="duvida-anexo" accept="image/*,application/pdf" style="display:none;">
+            </label>
+            <span id="duvida-anexo-nome" style="font-size:12px;color:#666;flex:1;"></span>
+            <button class="btn btn-primary" id="btn-enviar-duvida">&#10148; Enviar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ESCANDALOSO: PENDÊNCIAS DE PONTO -->
+  <div class="modal-overlay" id="modal-pendencias-ponto">
+    <div class="modal modal-pendencias-alarme" style="max-width:580px;">
+      <div class="modal-header modal-pendencias-header">
+        <h3>&#9888;&#65039; ATENÇÃO! PENDÊNCIAS DE REGISTRO DE PONTO</h3>
+      </div>
+      <div class="modal-body">
+        <div class="modal-pendencias-aviso">
+          🚨 <strong>Existem registros de ponto faltando em dias passados.</strong><br>
+          Esses pontos <strong>precisam ser corrigidos</strong> através de <strong>"Meus Ajustes"</strong> para que o administrador possa ajustar.
+        </div>
+        <div id="modal-pendencias-lista" class="modal-pendencias-lista"></div>
+        <div class="modal-pendencias-rodape">
+          <strong>📊 Por que isso é importante?</strong><br>
+          Sem o ajuste, esses dias entram no fechamento do mês como <em>falta</em> ou <em>jornada incompleta</em>, afetando seu <strong>banco de horas</strong> e o <strong>cálculo correto das horas trabalhadas no final do mês</strong>.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-pendencias-fechar">Vou resolver depois</button>
+        <button class="btn btn-danger" id="btn-pendencias-ir-ajustes">&#128221; Solicitar Ajuste agora</button>
       </div>
     </div>
   </div>

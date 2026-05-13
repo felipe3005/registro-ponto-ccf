@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
   OfflineManager.init();
   setupUpdateListener();
   loadAppVersion();
+  _startUpdateChecks();
 
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('.pwd-toggle');
@@ -216,6 +217,8 @@ function showLogin() {
   // Desanexar listeners RTDB para evitar leak entre sessões
   if (_holeriteRef) { _holeriteRef.off(); _holeriteRef = null; }
   if (_holeriteAdminRef) { _holeriteAdminRef.off(); _holeriteAdminRef = null; }
+  if (_sidebarDuvidasAdminRef) { _sidebarDuvidasAdminRef.off(); _sidebarDuvidasAdminRef = null; }
+  if (_sidebarDuvidasFuncRef) { _sidebarDuvidasFuncRef.off(); _sidebarDuvidasFuncRef = null; }
   if (_pendingCounterRef) { _pendingCounterRef.off(); _pendingCounterRef = null; }
   if (_abonosAdminRef) { _abonosAdminRef.off(); _abonosAdminRef = null; }
   if (_ausenciaAbertaRef) { _ausenciaAbertaRef.off(); _ausenciaAbertaRef = null; }
@@ -229,6 +232,7 @@ function showLogin() {
 function showApp() {
   document.getElementById('page-login').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
+  _pendenciasModalShown = false;
 
   // Configurar sidebar
   document.getElementById('user-name').textContent = currentUser.nome;
@@ -260,6 +264,16 @@ function showApp() {
     _ausenciaAbertaRef = fbDb.ref('saidas_intermediarias').orderByChild('funcionario_uid').equalTo(currentUser.id);
     _ausenciaAbertaRef.on('value', () => {
       if (currentPage === 'ponto') loadRegistrosPonto();
+    });
+    // Sidebar badge: dúvidas não lidas pelo colaborador
+    if (_sidebarDuvidasFuncRef) _sidebarDuvidasFuncRef.off();
+    _sidebarDuvidasFuncRef = fbDb.ref(`holerites_duvidas/${currentUser.id}`);
+    _sidebarDuvidasFuncRef.on('value', snap => {
+      const data = snap.val() || {};
+      let count = 0;
+      Object.values(data).forEach(v => { if (v && v.unread_colab) count++; });
+      _duvidasFuncCount = count;
+      _duvidasFuncBadgeRecalc();
     });
     // Inicia o alarme de almoço (só colaborador)
     _alarmeIniciar();
@@ -301,6 +315,18 @@ function showApp() {
       _abonosPendentesCount = count;
       _abonosBadgeRecalc();
     });
+    // Sidebar badge: dúvidas não lidas pelo admin (todas as threads)
+    if (_sidebarDuvidasAdminRef) _sidebarDuvidasAdminRef.off();
+    _sidebarDuvidasAdminRef = fbDb.ref('holerites_duvidas');
+    _sidebarDuvidasAdminRef.on('value', snap => {
+      const data = snap.val() || {};
+      let count = 0;
+      Object.values(data).forEach(byKey => {
+        Object.values(byKey || {}).forEach(v => { if (v && v.unread_admin) count++; });
+      });
+      _duvidasAdminCount = count;
+      _duvidasAdminBadgeRecalc();
+    });
   }
 
   // Nav events
@@ -318,6 +344,8 @@ function showApp() {
     navigateTo('dashboard');
   } else {
     navigateTo('ponto');
+    // Em background, verifica pendências de ponto e mostra o modal vermelho se houver
+    setTimeout(() => _verificarPendenciasPontoColab(), 800);
   }
 }
 
@@ -328,6 +356,11 @@ function navigateTo(page) {
     _holeriteAdminRef.off();
     _holeriteAdminRef = null;
   }
+  // Desanexar listener da página de dúvidas ao sair
+  if (page !== 'duvidas-holerite' && _duvidasPageListenerRef) {
+    _duvidasPageListenerRef.off();
+    _duvidasPageListenerRef = null;
+  }
   // Limpa badge de ajustes/abonos quando admin entra na respectiva página
   if (page === 'ajustes-admin') {
     localStorage.setItem('ajustes_seen_count', String(_ajustesPendentesCount));
@@ -336,6 +369,16 @@ function navigateTo(page) {
   if (page === 'abonos-admin') {
     localStorage.setItem('abonos_seen_count', String(_abonosPendentesCount));
     _updateSidebarBadgeAbonos(0);
+  }
+  // Limpa badge de dúvidas quando entra na página (admin ou colab)
+  if (page === 'duvidas-holerite') {
+    if (currentUser && currentUser.role === 'admin') {
+      localStorage.setItem('duvidas_admin_seen_count', String(_duvidasAdminCount));
+      _updateSidebarBadgeDuvidas('admin', 0);
+    } else {
+      localStorage.setItem('duvidas_func_seen_count', String(_duvidasFuncCount));
+      _updateSidebarBadgeDuvidas('func', 0);
+    }
   }
   // Nota: _pendingCounterRef, _abonosAdminRef e _ausenciaAdminRef permanecem ativos em toda a sessão admin
   currentPage = page;
@@ -360,6 +403,7 @@ function navigateTo(page) {
     case 'abonos-admin': loadAbonosAdmin(); break;
     case 'holerites-admin': loadHoleritesAdmin(); break;
     case 'meu-holerite': loadMeuHolerite(); break;
+    case 'duvidas-holerite': loadDuvidasHolerite(); break;
     case 'ausencias-admin': loadAusenciasAdmin(); break;
     case 'minhas-ausencias': loadMinhasAusencias(); break;
     case 'ajuda': break; // estático, sem carga de dados
@@ -394,6 +438,8 @@ let _pendingCounterRef = null;  // listener tempo real do contador de ajustes pe
 let _abonosAdminRef = null;     // listener tempo real do contador de abonos pendentes (admin)
 let _holeriteRef = null;        // listener tempo real do badge de holerites (colaborador)
 let _holeriteAdminRef = null;   // listener tempo real do painel de holerites (admin)
+let _sidebarDuvidasAdminRef = null;  // badge sidebar admin (dúvidas não lidas)
+let _sidebarDuvidasFuncRef = null;   // badge sidebar colaborador (dúvidas não lidas)
 let _ausenciaAdminRef = null;   // listener tempo real do contador de ausências intermediárias (admin)
 let _ausenciaAbertaRef = null;  // listener tempo real da ausência em aberto do colaborador
 let _ajustesPendentesCount = 0; // total atual de ajustes pendentes (admin)
@@ -440,11 +486,118 @@ async function loadDashboardFunc(hoje) {
     _renderDashResumoMes(espelho, hojeISO);
     _renderDashStats(banco, espelho, horas);
     _renderDashAlertas(ajustes, abonos);
+    _renderDashAniversariantes('dash-aniversariantes');
     _renderDashFeriado(feriados, hojeISO);
+
+    // Modal escandaloso de pendências de ponto — usa função compartilhada (passa dados pré-buscados)
+    _verificarPendenciasPontoColab({ espelho, ajustes, hoje });
   } catch (err) {
     console.error('Erro ao carregar dashboard:', err);
   }
 }
+
+// Verifica pendências de ponto e mostra o modal (chamada no login + dashboard).
+// Aceita dados pré-buscados para evitar refetch.
+async function _verificarPendenciasPontoColab(preloaded) {
+  if (_pendenciasModalShown) return;
+  if (!currentUser || currentUser.role === 'admin') return;
+  if (!OfflineManager.isOnline()) return;
+
+  const hoje = preloaded?.hoje || new Date();
+  const hojeISO = formatDateISO(hoje);
+  const mes = hoje.getMonth() + 1;
+  const ano = hoje.getFullYear();
+
+  try {
+    const espelho = preloaded?.espelho !== undefined
+      ? preloaded.espelho
+      : await api.espelhoPonto(mes, ano).catch(() => null);
+    const ajustes = preloaded?.ajustes !== undefined
+      ? preloaded.ajustes
+      : await api.meusAjustes().catch(() => []);
+
+    const pendencias = _detectarPendenciasPonto(espelho, ajustes, hojeISO);
+    // Inclui mês anterior se hoje for até dia 10 (ajustes valem até 30 dias atrás)
+    if (hoje.getDate() <= 10) {
+      const mesAnt = mes === 1 ? 12 : mes - 1;
+      const anoAnt = mes === 1 ? ano - 1 : ano;
+      const espAnt = await api.espelhoPonto(mesAnt, anoAnt).catch(() => null);
+      const pendAnt = _detectarPendenciasPonto(espAnt, ajustes, hojeISO);
+      pendencias.push(...pendAnt);
+    }
+    if (pendencias.length > 0) {
+      _pendenciasModalShown = true;
+      _renderModalPendencias(pendencias);
+    }
+  } catch (err) {
+    console.error('Erro ao verificar pendências de ponto:', err);
+  }
+}
+
+// ─── Detecção de pendências de ponto (dias passados sem registro completo) ───
+let _pendenciasModalShown = false;
+
+function _detectarPendenciasPonto(espelho, ajustes, hojeISO) {
+  if (!espelho || !espelho.dias) return [];
+  const datasComAjustePendente = new Set(
+    (ajustes || []).filter(a => a.status === 'pendente').map(a => a.data)
+  );
+  const hojeDate = new Date(hojeISO + 'T12:00:00');
+  const pendencias = [];
+  for (const d of espelho.dias) {
+    if (d.data >= hojeISO) continue;
+    if (datasComAjustePendente.has(d.data)) continue;
+    if (d.status === 'fim_de_semana' || d.status === 'feriado') continue;
+    if (d.status === 'atestado' || d.status === 'abono_horas') continue;
+    if (d.temCompensacao) continue;
+    if (d.status !== 'falta' && d.status !== 'incompleto') continue;
+
+    const dataDate = new Date(d.data + 'T12:00:00');
+    const diasAtras = Math.floor((hojeDate - dataDate) / 86400000);
+    if (diasAtras > 30) continue;
+
+    const faltando = [];
+    if (!d.entrada) faltando.push('Entrada');
+    if (!d.saida_almoco) faltando.push('Saída Almoço');
+    if (!d.retorno_almoco) faltando.push('Retorno Almoço');
+    if (!d.saida) faltando.push('Saída');
+
+    pendencias.push({ data: d.data, status: d.status, faltando });
+  }
+  return pendencias;
+}
+
+function _renderModalPendencias(pendencias) {
+  const lista = document.getElementById('modal-pendencias-lista');
+  if (!lista) return;
+  const diasSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+  // Mais recente primeiro
+  pendencias.sort((a, b) => b.data.localeCompare(a.data));
+  lista.innerHTML = pendencias.map(p => {
+    const dt = new Date(p.data + 'T12:00:00');
+    const dataFmt = `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
+    const dow = diasSemana[dt.getDay()];
+    const tipoStatus = p.status === 'falta'
+      ? `<span style="color:#b91c1c;font-weight:700;">Dia inteiro sem nenhum registro de ponto</span>`
+      : `Faltando: <strong>${p.faltando.join(', ') || 'horários incompletos'}</strong>`;
+    return `<div class="modal-pendencias-item">
+      <div>
+        <div class="mp-data">${dataFmt} — ${dow}</div>
+        <div class="mp-falta">${tipoStatus}</div>
+      </div>
+      <span style="font-size:24px;">⚠️</span>
+    </div>`;
+  }).join('');
+  openModal('modal-pendencias-ponto');
+}
+
+document.getElementById('btn-pendencias-fechar').addEventListener('click', () => {
+  closeModal('modal-pendencias-ponto');
+});
+document.getElementById('btn-pendencias-ir-ajustes').addEventListener('click', () => {
+  closeModal('modal-pendencias-ponto');
+  navigateTo('meus-ajustes');
+});
 
 function _updateSidebarBadgeAjustes(count) {
   const badge = document.getElementById('sidebar-badge-ajustes');
@@ -490,6 +643,35 @@ function _updateSidebarBadgeAusencias(count) {
   if (!badge) return;
   if (count > 0) { badge.textContent = count; badge.style.display = 'inline-block'; }
   else { badge.style.display = 'none'; }
+}
+
+function _updateSidebarBadgeDuvidas(role, count) {
+  const id = role === 'admin' ? 'sidebar-badge-duvidas-admin' : 'sidebar-badge-duvidas-func';
+  const badge = document.getElementById(id);
+  if (!badge) return;
+  if (count > 0) { badge.textContent = count; badge.style.display = 'inline-block'; }
+  else { badge.style.display = 'none'; }
+}
+
+let _duvidasAdminCount = 0;
+let _duvidasFuncCount = 0;
+
+function _duvidasAdminBadgeRecalc() {
+  let seen = parseInt(localStorage.getItem('duvidas_admin_seen_count') || '0', 10);
+  if (seen > _duvidasAdminCount) {
+    seen = _duvidasAdminCount;
+    localStorage.setItem('duvidas_admin_seen_count', String(seen));
+  }
+  _updateSidebarBadgeDuvidas('admin', _duvidasAdminCount > seen ? _duvidasAdminCount : 0);
+}
+
+function _duvidasFuncBadgeRecalc() {
+  let seen = parseInt(localStorage.getItem('duvidas_func_seen_count') || '0', 10);
+  if (seen > _duvidasFuncCount) {
+    seen = _duvidasFuncCount;
+    localStorage.setItem('duvidas_func_seen_count', String(seen));
+  }
+  _updateSidebarBadgeDuvidas('func', _duvidasFuncCount > seen ? _duvidasFuncCount : 0);
 }
 
 function _renderDashGreeting(hoje) {
@@ -655,6 +837,9 @@ function _renderDashFeriado(feriados, hojeISO) {
 async function loadDashboardAdmin() {
   try {
     const data = await api.dashboardAdmin();
+
+    // Aniversariantes (admin)
+    _renderDashAniversariantes('dash-aniversariantes-admin');
 
     // ---- Stats cards ----
     document.getElementById('dashboard-stats-admin').innerHTML = `
@@ -1715,7 +1900,7 @@ async function loadEspelho(funcionarioId) {
   }
 }
 
-document.getElementById('btn-gerar-espelho').addEventListener('click', () => loadEspelho());
+document.getElementById('btn-gerar-espelho').addEventListener('click', () => loadEspelho(_espelhoFuncId));
 
 document.getElementById('btn-exportar-pdf').addEventListener('click', () => gerarEspelhoPDF());
 
@@ -1880,6 +2065,7 @@ document.getElementById('btn-novo-funcionario').addEventListener('click', async 
   document.getElementById('func-nome').value = '';
   document.getElementById('func-usuario').value = '';
   document.getElementById('func-email').value = '';
+  document.getElementById('func-aniversario').value = '';
   document.getElementById('func-senha').value = '';
   document.getElementById('func-cargo').value = '';
   document.getElementById('func-departamento').value = '';
@@ -1907,6 +2093,7 @@ document.getElementById('btn-novo-administrador').addEventListener('click', asyn
   document.getElementById('func-cargo').value = '';
   document.getElementById('func-departamento').value = '';
   document.getElementById('func-role').value = 'admin';
+  document.getElementById('func-aniversario').value = '';
   document.getElementById('func-usuario').readOnly = false;
   document.getElementById('func-senha-group').classList.remove('hidden');
   document.getElementById('func-jornada-fields').classList.add('hidden');
@@ -1925,6 +2112,7 @@ async function editarFuncionario(id) {
     document.getElementById('func-usuario').value = func.usuario || '';
     document.getElementById('func-usuario').readOnly = true;
     document.getElementById('func-email').value = func.email || '';
+    document.getElementById('func-aniversario').value = func.data_aniversario || '';
     document.getElementById('func-senha').value = '';
     document.getElementById('func-cargo').value = func.cargo || '';
     document.getElementById('func-departamento').value = func.departamento || '';
@@ -1954,6 +2142,7 @@ async function editarAdministrador(id) {
     document.getElementById('func-usuario').value = func.usuario || '';
     document.getElementById('func-usuario').readOnly = true;
     document.getElementById('func-email').value = func.email || '';
+    document.getElementById('func-aniversario').value = func.data_aniversario || '';
     document.getElementById('func-senha').value = '';
     document.getElementById('func-cargo').value = func.cargo || '';
     document.getElementById('func-departamento').value = func.departamento || '';
@@ -1980,6 +2169,7 @@ document.getElementById('btn-salvar-funcionario').addEventListener('click', asyn
     nome: document.getElementById('func-nome').value,
     usuario: document.getElementById('func-usuario').value,
     email: document.getElementById('func-email').value,
+    data_aniversario: document.getElementById('func-aniversario').value || null,
     cargo: document.getElementById('func-cargo').value,
     departamento: document.getElementById('func-departamento').value,
     role
@@ -2786,6 +2976,70 @@ async function removerFeriado(id) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
+// ==================== ANIVERSARIANTES ====================
+async function _renderDashAniversariantes(targetId) {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+  try {
+    const list = await api.listarAniversariantes();
+    if (!list || list.length === 0) { el.innerHTML = ''; return; }
+
+    const agora = new Date();
+    const hojeBase = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+    const anoAtual = agora.getFullYear();
+    const hojeMD = `${String(agora.getMonth()+1).padStart(2,'0')}-${String(agora.getDate()).padStart(2,'0')}`;
+    const meuUid = currentUser?.id;
+
+    // Aniversariantes de hoje
+    const hojeList = list.filter(a => (a.data || '').substring(5) === hojeMD);
+
+    // Próximo aniversariante (não hoje) — exclui o próprio usuário; calcula diff em dias inteiros (ambos à meia-noite)
+    const proximo = (() => {
+      const candidatos = list
+        .filter(a => (a.data || '').substring(5) !== hojeMD)
+        .filter(a => !meuUid || a.uid !== meuUid)
+        .map(a => {
+          const md = (a.data || '').substring(5);
+          const [mm, dd] = md.split('-').map(Number);
+          let dt = new Date(anoAtual, mm - 1, dd); // meia-noite local
+          if (dt < hojeBase) dt = new Date(anoAtual + 1, mm - 1, dd);
+          const diff = Math.round((dt - hojeBase) / 86400000);
+          return { ...a, _dt: dt, _diff: diff };
+        })
+        .filter(c => c._diff <= 30 && c._diff >= 1)
+        .sort((a, b) => a._diff - b._diff);
+      return candidatos[0] || null;
+    })();
+
+    let html = '';
+    // Detecta se hoje é aniversário do próprio usuário pelo uid (mais confiável)
+    const ehMeuAniversario = meuUid && hojeList.some(a => a.uid === meuUid);
+    const primeiroNome = (currentUser?.nome || '').split(' ')[0] || 'colaborador';
+
+    if (ehMeuAniversario) {
+      html += `<div class="dash-aniversariante eu">🎂🎉🥳 <span><strong>Feliz Aniversário, ${primeiroNome}!</strong> Toda a equipe CCF deseja um dia incrível, cheio de alegria, saúde e realizações! 🎊🎁✨</span></div>`;
+    }
+
+    // Outros aniversariantes (exclui o próprio usuário)
+    const outros = hojeList.filter(a => !meuUid || a.uid !== meuUid);
+    if (outros.length > 0) {
+      const nomes = outros.map(a => `<strong>${a.nome}</strong>`).join(', ');
+      const plural = outros.length > 1;
+      html += `<div class="dash-aniversariante hoje">🎉🎂 <span><strong>Hoje é aniversário de ${nomes}!</strong> Deseje${plural ? 'm' : ''} um feliz aniversário 🥳</span></div>`;
+    }
+    if (proximo) {
+      const md = (proximo.data || '').substring(5);
+      const [m, d] = md.split('-');
+      const dataFmt = `${d}/${m}`;
+      const quando = proximo._diff === 1 ? 'amanhã' : `em ${proximo._diff} dias`;
+      html += `<div class="dash-aniversariante prox">🎂 <span><strong>Próximo aniversariante:</strong> ${proximo.nome} — ${dataFmt} (${quando})</span></div>`;
+    }
+    el.innerHTML = html;
+  } catch (err) {
+    el.innerHTML = '';
+  }
+}
+
 // ==================== PERFIS DE HORÁRIO ====================
 async function loadPerfisHorario() {
   try {
@@ -3246,12 +3500,51 @@ document.getElementById('abonos-filtro-status').addEventListener('change', loadA
 document.getElementById('abonos-filtro-tipo').addEventListener('change', loadAbonosAdmin);
 
 // ==================== APP VERSION ====================
-const APP_VERSION = '2.8.0';
+const APP_VERSION = '2.16.1';
 
 async function loadAppVersion() {
   const el = document.getElementById('app-version');
   if (el) el.textContent = 'v' + APP_VERSION;
 }
+
+// ==================== AUTO UPDATE (polling de version.json) ====================
+let _updateCheckTimer = null;
+let _updateApplying = false;
+
+async function _checkForAppUpdate() {
+  if (_updateApplying) return;
+  try {
+    const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const j = await res.json();
+    if (j && j.version && j.version !== APP_VERSION) {
+      _aplicarAtualizacaoAuto(j.version);
+    }
+  } catch (e) { /* offline / silencioso */ }
+}
+
+function _aplicarAtualizacaoAuto(novaVersao) {
+  if (_updateApplying) return;
+  _updateApplying = true;
+  toast(`🚀 Nova versão <strong>${novaVersao}</strong> disponível! Atualizando em 5 segundos...`, 'info');
+  setTimeout(() => {
+    if ('caches' in window) {
+      caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {});
+    }
+    window.location.reload();
+  }, 5000);
+}
+
+function _startUpdateChecks() {
+  if (_updateCheckTimer) clearInterval(_updateCheckTimer);
+  _checkForAppUpdate();
+  _updateCheckTimer = setInterval(_checkForAppUpdate, 120 * 1000); // a cada 2 min
+}
+
+// Verifica também quando o usuário volta para a aba
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') _checkForAppUpdate();
+});
 
 function showUpdateProgress(label, pct) {
   const wrap = document.getElementById('update-progress-wrap');
@@ -3571,6 +3864,7 @@ async function loadHoleritesAdmin() {
       });
     });
 
+
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">${err.message}</td></tr>`;
   }
@@ -3687,7 +3981,9 @@ async function loadMeuHolerite() {
                   <td><strong>&#128176; ${nomeMes} ${h.ano}</strong></td>
                   <td>${desde}</td>
                   <td>${badge}</td>
-                  <td><button class="btn btn-sm btn-primary" onclick="verMeuHolerite('${h.key}','${h.url}','${label}')">&#128196; Visualizar</button></td>
+                  <td>
+                    <button class="btn btn-sm btn-primary" onclick="verMeuHolerite('${h.key}','${h.url}','${label}')">&#128196; Visualizar</button>
+                  </td>
                 </tr>`;
               }).join('')}
             </tbody>
@@ -3698,6 +3994,278 @@ async function loadMeuHolerite() {
     container.innerHTML = `<div class="text-center text-muted" style="padding:32px;">${err.message}</div>`;
   }
 }
+
+// ==================== DÚVIDAS DE HOLERITE ====================
+let _duvidaCtx = null;       // { uid, key, mes, ano, label }
+let _duvidaAnexoFile = null;
+let _duvidaListenerRef = null;
+let _duvidasPageListenerRef = null;
+let _duvidasListaCache = [];
+let _userNameMap = null;
+
+async function _carregarMapaNomesUsuarios() {
+  if (_userNameMap) return _userNameMap;
+  try {
+    const snap = await fbDb.ref('users').once('value');
+    const data = snap.val() || {};
+    _userNameMap = {};
+    Object.entries(data).forEach(([uid, u]) => { _userNameMap[uid] = u.nome || uid; });
+  } catch (_) { _userNameMap = {}; }
+  return _userNameMap;
+}
+
+function _formatRelativo(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '-';
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return 'agora';
+  if (diff < 3600) return `há ${Math.floor(diff/60)} min`;
+  if (diff < 86400) return `há ${Math.floor(diff/3600)}h`;
+  if (diff < 604800) return `há ${Math.floor(diff/86400)} dias`;
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+
+async function loadDuvidasHolerite() {
+  if (!OfflineManager.isOnline()) { _offlinePage('duvidas-body', 'Dúvidas indisponível offline'); return; }
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  document.getElementById('duvidas-page-title').textContent = isAdmin ? 'Dúvidas Colaborador' : 'Minhas Dúvidas';
+
+  if (isAdmin) await _carregarMapaNomesUsuarios();
+  const filtroColab = document.getElementById('duvidas-filtro-colab');
+  if (isAdmin && filtroColab && filtroColab.options.length <= 1 && _userNameMap) {
+    Object.entries(_userNameMap).sort((a,b) => a[1].localeCompare(b[1])).forEach(([uid, nome]) => {
+      const opt = document.createElement('option');
+      opt.value = uid; opt.textContent = nome;
+      filtroColab.appendChild(opt);
+    });
+  }
+
+  if (_duvidasPageListenerRef) { _duvidasPageListenerRef.off(); _duvidasPageListenerRef = null; }
+  _duvidasPageListenerRef = fbDb.ref('holerites_duvidas');
+  _duvidasPageListenerRef.on('value', async () => {
+    if (currentPage !== 'duvidas-holerite') return;
+    try {
+      _duvidasListaCache = await api.listarDuvidas();
+      _renderTabelaDuvidas();
+    } catch (err) { toast(err.message || 'Erro ao carregar dúvidas', 'error'); }
+  });
+}
+
+function _renderTabelaDuvidas() {
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  const tbody = document.getElementById('duvidas-body');
+  if (!tbody) return;
+  const filtroStatus = document.getElementById('duvidas-filtro-status').value;
+  const filtroColab = isAdmin ? document.getElementById('duvidas-filtro-colab').value : '';
+
+  let itens = _duvidasListaCache.slice();
+  if (filtroStatus) itens = itens.filter(x => x.status === filtroStatus);
+  if (filtroColab) itens = itens.filter(x => x.uid === filtroColab);
+
+  if (itens.length === 0) {
+    const colspan = isAdmin ? 6 : 5;
+    tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted" style="padding:32px;">Nenhuma dúvida ${filtroStatus ? `com status "${filtroStatus}"` : 'cadastrada'}.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = itens.map(item => {
+    const colabNome = (_userNameMap && _userNameMap[item.uid]) || item.uid;
+    // Título da dúvida: assunto livre, ou (legado) "Holerite Maio/2026"
+    const holLabel = item.mes && item.ano ? `${MESES_NOMES[(item.mes - 1)]} ${item.ano}` : '';
+    const titulo = item.assunto || (holLabel ? `Holerite ${holLabel}` : 'Dúvida');
+    const holBadge = item.mes && item.ano && item.assunto
+      ? ` <span class="badge badge-info" style="font-size:10px;">💰 ${holLabel}</span>` : '';
+    const tituloFmt = `${titulo}${holBadge}`;
+    const labelEsc = `${titulo} — ${colabNome}`.replace(/'/g, '&apos;');
+    const statusBadge = item.status === 'aberto'
+      ? '<span class="duvidas-status-aberto">● Aberto</span>'
+      : '<span class="duvidas-status-fechado">● Fechado</span>';
+    const naoLido = isAdmin ? item.unread_admin : item.unread_colab;
+    const unreadIcon = naoLido ? ' <span class="duvida-badge" style="display:inline-block;">!</span>' : '';
+    const colColab = isAdmin ? `<td>${colabNome}${unreadIcon}</td>` : '';
+    const colTitulo = `<td><strong>💬 ${tituloFmt}</strong>${!isAdmin ? unreadIcon : ''}</td>`;
+    return `<tr${naoLido ? ' style="background:#fff8eb;"' : ''}>
+      ${colTitulo}
+      ${colColab}
+      <td>${statusBadge}</td>
+      <td>${_formatRelativo(item.ultima_atividade)}</td>
+      <td>${item.total_mensagens} msg${item.total_mensagens !== 1 ? 's' : ''}</td>
+      <td><button class="btn btn-sm btn-primary" onclick="abrirDuvidasHolerite('${item.uid}','${item.key}',${item.mes || 0},${item.ano || 0},'${labelEsc}')">💬 Abrir</button></td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('duvidas-filtro-status').addEventListener('change', () => _renderTabelaDuvidas());
+document.getElementById('duvidas-filtro-colab').addEventListener('change', () => _renderTabelaDuvidas());
+
+document.getElementById('btn-nova-duvida').addEventListener('click', async () => {
+  document.getElementById('duvida-assunto').value = '';
+  const sel = document.getElementById('select-holerite-duvida');
+  sel.innerHTML = '<option value="">Não vincular a holerite</option><option value="" disabled>Carregando holerites...</option>';
+  openModal('modal-selecionar-holerite-duvida');
+  setTimeout(() => document.getElementById('duvida-assunto').focus(), 80);
+  try {
+    const holerites = await api.meusHolerites();
+    let opts = '<option value="">Não vincular a holerite</option>';
+    holerites.forEach(h => {
+      const nomeMes = MESES_NOMES[(h.mes || 1) - 1];
+      opts += `<option value="${h.key}|${h.mes}|${h.ano}|${nomeMes} ${h.ano}">${nomeMes} ${h.ano}</option>`;
+    });
+    sel.innerHTML = opts;
+  } catch (err) {
+    sel.innerHTML = `<option value="">Não vincular a holerite</option><option value="" disabled>${err.message}</option>`;
+  }
+});
+
+document.getElementById('btn-abrir-nova-duvida').addEventListener('click', () => {
+  const assunto = document.getElementById('duvida-assunto').value.trim();
+  if (!assunto) { toast('Informe um assunto para a dúvida', 'error'); return; }
+  const v = document.getElementById('select-holerite-duvida').value;
+  closeModal('modal-selecionar-holerite-duvida');
+
+  if (v) {
+    // Vinculada a um holerite específico — usa a key do holerite
+    const [key, mes, ano, holLabel] = v.split('|');
+    abrirDuvidasHolerite(currentUser.id, key, parseInt(mes, 10), parseInt(ano, 10), `${assunto} (${holLabel})`, assunto);
+  } else {
+    // Dúvida genérica — gera um threadKey novo
+    const threadKey = api.novaDuvidaThreadKey(currentUser.id);
+    abrirDuvidasHolerite(currentUser.id, threadKey, 0, 0, assunto, assunto);
+  }
+});
+
+async function abrirDuvidasHolerite(uid, key, mes, ano, label, assunto) {
+  _duvidaCtx = { uid, key, mes: parseInt(mes, 10), ano: parseInt(ano, 10), label, assunto: assunto || null };
+  _duvidaAnexoFile = null;
+  document.getElementById('duvida-anexo-nome').textContent = '';
+  document.getElementById('duvida-anexo').value = '';
+  document.getElementById('duvida-texto').value = '';
+  document.getElementById('duvidas-holerite-titulo').textContent = `Dúvidas — ${label}`;
+  document.getElementById('duvidas-mensagens-lista').innerHTML = '<div class="text-muted text-center" style="padding:32px;">Carregando...</div>';
+  openModal('modal-duvidas-holerite');
+
+  if (_duvidaListenerRef) { _duvidaListenerRef.off(); _duvidaListenerRef = null; }
+  _duvidaListenerRef = fbDb.ref(`holerites_duvidas/${uid}/${key}`);
+  _duvidaListenerRef.on('value', () => _refreshDuvidaUI());
+
+  try { await api.marcarDuvidaLida(uid, key); } catch (_) {}
+}
+
+async function _refreshDuvidaUI() {
+  if (!_duvidaCtx) return;
+  const { uid, key } = _duvidaCtx;
+  try {
+    const duvida = await api.obterDuvidaHolerite(uid, key);
+    _renderDuvidaMensagens(duvida);
+    _renderDuvidaStatusEHeader(duvida);
+  } catch (err) {
+    toast(err.message || 'Erro ao carregar dúvidas', 'error');
+  }
+}
+
+function _renderDuvidaMensagens(duvida) {
+  const cont = document.getElementById('duvidas-mensagens-lista');
+  if (!duvida || !duvida.mensagens || duvida.mensagens.length === 0) {
+    cont.innerHTML = `<div class="text-muted text-center" style="padding:32px;">
+      Nenhuma dúvida registrada ainda. Use o campo abaixo para iniciar.
+    </div>`;
+    return;
+  }
+  const meId = currentUser.id;
+  cont.innerHTML = duvida.mensagens.map(m => {
+    const isMine = m.autor_uid === meId;
+    const cls = isMine ? 'me' : 'other';
+    const quando = m.created_at ? new Date(m.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+    const roleLabel = m.autor_role === 'admin' ? '👤 Administrador' : '👤 Colaborador';
+    const anexo = m.anexo_url
+      ? `<a href="${m.anexo_url}" target="_blank" rel="noopener" class="duvida-msg-anexo">📎 ${m.anexo_nome || 'arquivo'}</a>`
+      : '';
+    const texto = (m.texto || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<div class="duvida-msg ${cls}">
+      <div class="duvida-msg-meta">${m.autor_nome || roleLabel} · ${quando}</div>
+      ${texto ? `<div class="duvida-msg-texto">${texto}</div>` : ''}
+      ${anexo}
+    </div>`;
+  }).join('');
+  cont.scrollTop = cont.scrollHeight;
+}
+
+function _renderDuvidaStatusEHeader(duvida) {
+  const badge = document.getElementById('duvidas-holerite-status-badge');
+  const inputWrap = document.getElementById('duvidas-input-wrap');
+  const btnStatus = document.getElementById('btn-duvida-mudar-status');
+  const status = duvida?.status || 'aberto';
+  if (status === 'aberto') {
+    badge.innerHTML = '<span class="duvidas-status-aberto">● Aberto</span>';
+    btnStatus.className = 'btn btn-sm btn-danger';
+    btnStatus.textContent = '✕ Finalizar dúvida';
+    btnStatus.dataset.next = 'fechado';
+    inputWrap.style.display = '';
+  } else {
+    badge.innerHTML = '<span class="duvidas-status-fechado">● Fechado</span>';
+    btnStatus.className = 'btn btn-sm btn-success';
+    btnStatus.textContent = '↻ Reabrir dúvida';
+    btnStatus.dataset.next = 'aberto';
+    inputWrap.style.display = 'none';
+    const cont = document.getElementById('duvidas-mensagens-lista');
+    if (cont && !cont.querySelector('.duvidas-fechado-aviso')) {
+      cont.insertAdjacentHTML('beforeend', `<div class="duvidas-fechado-aviso">🔒 Assunto finalizado. Enviar uma nova mensagem reabrirá o tópico.</div>`);
+    }
+  }
+}
+
+document.getElementById('duvida-anexo').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) { _duvidaAnexoFile = null; document.getElementById('duvida-anexo-nome').textContent = ''; return; }
+  if (f.size > 10 * 1024 * 1024) { toast('Arquivo muito grande (máx 10 MB)', 'error'); e.target.value = ''; return; }
+  _duvidaAnexoFile = f;
+  document.getElementById('duvida-anexo-nome').textContent = `📎 ${f.name}`;
+});
+
+document.getElementById('btn-enviar-duvida').addEventListener('click', async () => {
+  if (!_duvidaCtx) return;
+  const texto = document.getElementById('duvida-texto').value.trim();
+  if (!texto && !_duvidaAnexoFile) { toast('Escreva uma mensagem ou anexe um arquivo', 'error'); return; }
+  const btn = document.getElementById('btn-enviar-duvida');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  try {
+    const { uid, key, mes, ano, assunto } = _duvidaCtx;
+    await api.enviarMensagemDuvida(uid, key, mes, ano, texto, _duvidaAnexoFile, assunto);
+    document.getElementById('duvida-texto').value = '';
+    document.getElementById('duvida-anexo').value = '';
+    document.getElementById('duvida-anexo-nome').textContent = '';
+    _duvidaAnexoFile = null;
+    toast('Mensagem enviada!', 'success');
+  } catch (err) {
+    toast(err.message || 'Erro ao enviar', 'error');
+  } finally {
+    btn.disabled = false; btn.innerHTML = '&#10148; Enviar';
+  }
+});
+
+document.getElementById('btn-duvida-mudar-status').addEventListener('click', async () => {
+  if (!_duvidaCtx) return;
+  // Snapshot do contexto: o modal de confirmação pode disparar listeners que zerariam _duvidaCtx
+  const ctx = { uid: _duvidaCtx.uid, key: _duvidaCtx.key };
+  const next = document.getElementById('btn-duvida-mudar-status').dataset.next;
+  const labels = { aberto: 'Reabrir esta dúvida?', fechado: 'Finalizar esta dúvida? O tópico só voltará a abrir se alguém enviar uma nova mensagem.' };
+  const ok = await showConfirm(labels[next], { title: next === 'fechado' ? '✕ Finalizar dúvida' : '↻ Reabrir dúvida', okText: next === 'fechado' ? 'Finalizar' : 'Reabrir', variant: next === 'fechado' ? 'danger' : 'primary' });
+  if (!ok) return;
+  try {
+    await api.mudarStatusDuvida(ctx.uid, ctx.key, next);
+    toast(next === 'fechado' ? 'Dúvida finalizada.' : 'Dúvida reaberta.', 'success');
+  } catch (err) { toast(err.message || 'Erro', 'error'); }
+});
+
+// Limpa listener quando fecha o modal
+const _origCloseModal = closeModal;
+closeModal = function(id) {
+  if (id === 'modal-duvidas-holerite' && _duvidaListenerRef) {
+    _duvidaListenerRef.off(); _duvidaListenerRef = null; _duvidaCtx = null;
+  }
+  return _origCloseModal(id);
+};
 
 async function verMeuHolerite(key, url, label) {
   // Abre o modal imediatamente, sem esperar o RTDB
